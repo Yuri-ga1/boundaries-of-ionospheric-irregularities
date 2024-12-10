@@ -9,7 +9,6 @@ import h5py as h5
 from datetime import datetime, timezone
 
 from config import *
-from test_function import *
 
 import numpy as np
 
@@ -142,15 +141,21 @@ def process_satellite(file, station, satellite):
     timestamps = file[station][satellite]['timestamp'][:]
     elevation = np.degrees(file[station][satellite]['elevation'][:])
 
-    if not is_good_data(roti, threshold=DATA_CASE_THRESHOLD):
+    valid_indices = elevation >= ELEVATION_CUTOFF
+    valid_roti = roti[valid_indices]
+    valid_timestamps = timestamps[valid_indices]
+
+    if not is_good_data(valid_roti, threshold=DATA_CASE_THRESHOLD):
         print(f"Data is bad in {station}-{satellite}")
         return
     
-    splited_roti, splited_timestamps = split_by_timestamp_threshold(roti, timestamps, TIMESTAMPS_THRESHOLD)
-    create_graphs_for_satellite(station, satellite, splited_roti, splited_timestamps, timestamps, roti)
+    splited_roti, splited_timestamps = split_by_timestamp_threshold(valid_roti, valid_timestamps, TIMESTAMPS_THRESHOLD)
+    create_graphs_for_satellite(
+        station, satellite, splited_roti, splited_timestamps, timestamps, roti, elevation
+    )
 
 
-def create_graphs_for_satellite(station, satellite, splited_roti, splited_timestamps, timestamps, roti):
+def create_graphs_for_satellite(station, satellite, splited_roti, splited_timestamps, timestamps, roti, elevation):
     """
     Creates graphs for satellite data after processing.
 
@@ -183,7 +188,18 @@ def create_graphs_for_satellite(station, satellite, splited_roti, splited_timest
     if results is None:
         return
     
-    plot_graphs(station, satellite, timestamps, all_extremum_max, all_extremum_min, roti, all_max_index, splited_timestamps)
+    plot_graphs(
+        station=station,
+        satellite=satellite,
+        timestamps=timestamps,
+        extremum_max=all_extremum_max,
+        extremum_min=all_extremum_min,
+        roti=roti, 
+        max_indices=all_max_index,
+        min_indices=all_min_index,
+        splited_timestamps=splited_timestamps,
+        elevation=elevation
+    )
 
 
 def process_extremum(sko_a, sko_b, roti_part):
@@ -203,11 +219,25 @@ def process_extremum(sko_a, sko_b, roti_part):
     extremum_min[SEGMENT_LENGTH:-SEGMENT_LENGTH+1] = ratios_min
     
     max_index = np.argmax(extremum_max)
-    min_index = np.argmax(ratios_min)
+    min_index = np.argmax(extremum_min)
     return extremum_max, extremum_min, max_index, min_index
 
+def synchronize_data_with_timestamps(data, timestamps, valid_indices):
+    """
+    Synchronizes data with timestamps based on valid indices.
 
-def plot_graphs(station, satellite, timestamps, extremum_max, extremum_min, roti, max_indices, splited_timestamps):
+    :param data: numpy.ndarray, data to be synchronized.
+    :param timestamps: numpy.ndarray, original timestamps.
+    :param valid_indices: list or numpy.ndarray, indices of valid data points.
+    :return: tuple of synchronized timestamps and data.
+    """
+    synced_timestamps = timestamps[valid_indices]
+    synced_data = data[valid_indices]
+    return synced_timestamps, synced_data
+
+def plot_graphs(
+    station, satellite, timestamps, extremum_max, extremum_min, roti, max_indices, min_indices, splited_timestamps, elevation
+):
     """
     Plots graphs for extremums and ROTI data.
 
@@ -219,12 +249,21 @@ def plot_graphs(station, satellite, timestamps, extremum_max, extremum_min, roti
     :param roti: numpy.ndarray, original ROTI values.
     :param max_indices: list, indices of maximum values.
     :param splited_timestamps: list of numpy.ndarray, split timestamps.
-    """
-    times = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in timestamps]
+    """    
+    valid_indices = elevation >= ELEVATION_CUTOFF
+    invalid_indices = ~valid_indices
+
+    valid_roti = roti[valid_indices]
+    valid_timestamps = timestamps[valid_indices]
+    invalid_roti = roti[invalid_indices]
+    invalid_timestamps = timestamps[invalid_indices]
+    
+    valid_times = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in valid_timestamps]
+    invalid_times = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in invalid_timestamps]
     fig, axes = plt.subplots(3, 1, figsize=(10, 15), sharex=True)
 
     # Plot 1: extremum_max
-    axes[0].scatter(times, extremum_max, label='extremum_max')
+    axes[0].scatter(valid_times, extremum_max)
     highlight_extremums(axes[0], max_indices, splited_timestamps, "yellow", "green")
     axes[0].set_ylabel('sko_a/sko_b')
     axes[0].set_title(f'{station} - {satellite} - extremum_max')
@@ -232,20 +271,22 @@ def plot_graphs(station, satellite, timestamps, extremum_max, extremum_min, roti
     axes[0].legend()
 
     # Plot 2: extremum_min
-    axes[1].scatter(times, extremum_min, label='extremum_min')
+    axes[1].scatter(valid_times, extremum_min)
+    highlight_extremums(axes[1], min_indices, splited_timestamps, "yellow", "green")
     axes[1].set_ylabel('sko_b/sko_a')
     axes[1].set_title(f'{station} - {satellite} - extremum_min')
     axes[1].grid(True, linestyle='--', alpha=0.5)
     axes[1].legend()
 
     # Plot 3: ROTI
-    axes[2].scatter(times, roti, label="ROTI")
+    axes[2].scatter(valid_times, valid_roti, label="Valid roti", color="blue")
+    axes[2].scatter(invalid_times, invalid_roti, label="Invalid roti", color="red")
     axes[2].set_xlabel('Time')
     axes[2].set_ylabel('ROTI')
     axes[2].set_title(f'{station} - {satellite} - ROTI')
     axes[2].grid(True, linestyle='--', alpha=0.5)
     axes[2].legend()
-    
+
     time_formatter = DateFormatter('%H:%M')
     plt.gca().xaxis.set_major_formatter(time_formatter)
     plt.xticks(rotation=45)
