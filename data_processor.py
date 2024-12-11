@@ -1,6 +1,3 @@
-# import matplotlib
-# matplotlib.use('Agg')
-
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
 from matplotlib.axes import Axes
@@ -44,7 +41,10 @@ class DataProcessor:
             import matplotlib
             matplotlib.use('Agg')
         
-        self.roti = None
+        self.calm_roti = None
+        self.calm_timestamps = None
+        
+        self.restless_roti = None
         self.elevation = None
         self.timestamps = None
         
@@ -140,38 +140,46 @@ class DataProcessor:
             else:
                 return np.array(results)
         
-    def __process_station(self, file: h5.File, station: str):
+    def __process_station(self, restless: h5.File, calm: h5.File, station: str):
         """
         Processes data for a specific station.
 
-        :param file: h5py.File, the file containing station data.
+        :param restless: h5py.File, the file containing restless station data.
+        :param calm: h5py.File, the file containing calm station data.
         :param station: str, name of the station.
         """
-        station_loc = dict(file[station].attrs)
+        station_loc = dict(restless[station].attrs)
         is_near_pole = station_loc['lon'] <= self.lon_condition and station_loc['lat'] >= self.lat_condition
         if not is_near_pole:
             return
         
-        satellites = file[station].keys()
+        satellites = restless[station].keys()
         for satellite in satellites:
-            self.__process_satellite(file, station, satellite)
+            self.__process_satellite(restless, calm, station, satellite)
 
 
-    def __process_satellite(self, file: h5.File, station: str, satellite: str):
+    def __process_satellite(self, restless: h5.File, calm: h5.File, station: str, satellite: str):
         """
         Processes data for a specific satellite of a station.
 
-        :param file: h5py.File, the file containing satellite data.
+        :param restless: h5py.File, the file containing restless satellite data.
+        :param calm: h5py.File, the file containing calm satellite data.
         :param station: str, name of the station.
         :param satellite: str, name of the satellite.
         """
         print(f"Processing {station} - {satellite}")
-        self.roti = file[station][satellite]['roti'][:]
-        self.timestamps = file[station][satellite]['timestamp'][:]
-        self.elevation = np.degrees(file[station][satellite]['elevation'][:])
+        try:
+            self.calm_roti = calm[station][satellite]['roti'][:]
+            self.calm_timestamps = calm[station][satellite]['timestamp'][:]
+        except Exception as e:
+            print(f"There is no station or satelite on calm day. {station}-{satellite}")
+        
+        self.restless_roti = restless[station][satellite]['roti'][:]
+        self.timestamps = restless[station][satellite]['timestamp'][:]
+        self.elevation = np.degrees(restless[station][satellite]['elevation'][:])
 
         valid_indices = self.elevation >= self.elevation_cutoff
-        valid_roti = self.roti[valid_indices]
+        valid_roti = self.restless_roti[valid_indices]
         valid_timestamps = self.timestamps[valid_indices]
 
         if not self.__is_good_data(data=valid_roti, threshold=self.data_case_threshold):
@@ -270,13 +278,14 @@ class DataProcessor:
         valid_indices = self.elevation >= self.elevation_cutoff
         invalid_indices = ~valid_indices
 
-        valid_roti = self.roti[valid_indices]
+        valid_roti = self.restless_roti[valid_indices]
         valid_timestamps = self.timestamps[valid_indices]
-        invalid_roti = self.roti[invalid_indices]
+        invalid_roti = self.restless_roti[invalid_indices]
         invalid_timestamps = self.timestamps[invalid_indices]
         
         valid_times = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in valid_timestamps]
         invalid_times = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in invalid_timestamps]
+        
         fig, axes = plt.subplots(3, 1, figsize=(10, 15), sharex=True)
 
         # Plot 1: extremum_max
@@ -294,8 +303,14 @@ class DataProcessor:
         axes[1].grid(True, linestyle='--', alpha=0.5)
 
         # Plot 3: ROTI
-        axes[2].scatter(valid_times, valid_roti, label="Valid roti", color="blue")
-        axes[2].scatter(invalid_times, invalid_roti, label="Invalid roti", color="red")
+        axes[2].scatter(valid_times, valid_roti, label="Valid roti for restless day", color="blue")
+        axes[2].scatter(invalid_times, invalid_roti, label="Invalid roti for restless day", color="red")
+        
+        if self.calm_roti is not None:
+            dt = valid_times[0].date()
+            calm_times = [datetime.fromtimestamp(ts, tz=timezone.utc).replace(year=dt.year, month=dt.month, day=dt.day) for ts in self.calm_timestamps]
+            axes[2].scatter(calm_times, self.calm_roti, label="Roti for calm day", color="green")
+            
         axes[2].set_xlabel('Time')
         axes[2].set_ylabel('ROTI')
         axes[2].set_title(f'{station} - {satellite} - ROTI')
@@ -317,9 +332,6 @@ class DataProcessor:
         else:
             plt.show()
         
-
-
-
 
     def __highlight_extremums(
         self,
@@ -353,18 +365,20 @@ class DataProcessor:
             axis.axvspan(max_after_start_time, max_after_end_time, color=color_after, alpha=0.3)
 
 
-    def run(self, file_path: str, stations: list = None):
+    def run(self, restless_day: str, calm_day: str, stations: list = None):
         """
         Main function to process the file and create graphs.
 
         Reads station data and processes satellites for each station.
         
-        :param file_path: str, path to the HDF5 file.
+        :param restless_day: str, path to the HDF5 file with restless data.
+        :param calm_day: str, path to the HDF5 file calm restless data.
         :param stations: list, stations to process.
-        """
-        with h5.File(file_path, 'r') as file:
-            if stations is None:
-                stations = file.keys()
-                
-            for station in stations:
-                self.__process_station(file, station)
+        """ 
+        with h5.File(restless_day, 'r') as restless:
+            with h5.File(calm_day, 'r') as calm:
+                if stations is None:
+                    stations = restless.keys()
+                    
+                for station in stations:
+                    self.__process_station(restless, calm, station)
