@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 import numpy as np
 import os
 
+from config import logger
+
 class DataProcessor:
     def __init__(
         self,
@@ -112,7 +114,7 @@ class DataProcessor:
         n = len(series)
         
         if n <= segment_length*2:
-            print("Data segment must be > than segment_length*2")
+            logger.warning("Data segment must be > than segment_length*2")
             return None
         
         results = []
@@ -167,12 +169,12 @@ class DataProcessor:
         :param station: str, name of the station.
         :param satellite: str, name of the satellite.
         """
-        print(f"Processing {station} - {satellite}")
+        logger.info(f"Processing {station} - {satellite}")
         try:
             self.calm_roti = calm[station][satellite]['roti'][:]
             self.calm_timestamps = calm[station][satellite]['timestamp'][:]
         except Exception as e:
-            print(f"There is no station or satelite on calm day. {station}-{satellite}")
+            logger.error(f"There is no station or satelite on calm day. {station}-{satellite}")
         
         self.restless_roti = restless[station][satellite]['roti'][:]
         self.timestamps = restless[station][satellite]['timestamp'][:]
@@ -182,9 +184,12 @@ class DataProcessor:
         valid_roti = self.restless_roti[valid_indices]
         valid_timestamps = self.timestamps[valid_indices]
 
-        if not self.__is_good_data(data=valid_roti, threshold=self.data_case_threshold):
-            print(f"Data is bad in {station}-{satellite}")
-            return
+        try:
+            if not self.__is_good_data(data=valid_roti, threshold=self.data_case_threshold):
+                logger.info(f"Data is bad in {station}-{satellite}")
+                return
+        except ValueError as e:
+            logger.error(f"{e}. {station}-{satellite}")
         
         splited_roti, splited_timestamps = self.__split_by_timestamp_threshold(valid_roti, valid_timestamps, self.timestamps_threshold)
         self.__create_graphs_for_satellite(
@@ -211,7 +216,7 @@ class DataProcessor:
             sko_a, sko_b = results[:, 1], results[:, 0]
 
             if None in sko_a or None in sko_b:
-                print(f"None values in sko series for {station}-{satellite}")
+                logger.warning(f"None values in sko series for {station}-{satellite}")
                 continue
             
             extremum_max, extremum_min, max_index, min_index = self.__process_extremum(sko_a, sko_b, roti_part)
