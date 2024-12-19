@@ -69,7 +69,7 @@ class DataProcessor:
         split_data = np.split(data, break_indices)
         splited_timestamps = np.split(timestamps, break_indices)
 
-        return split_data, splited_timestamps
+        return np.array(split_data, dtype=object), np.array(splited_timestamps, dtype=object)
 
     def __is_good_data(self, data: np.ndarray, threshold: float = 0.1):
         """
@@ -114,7 +114,6 @@ class DataProcessor:
         n = len(series)
         
         if n <= segment_length*2:
-            logger.warning("Data segment must be > than segment_length*2")
             return None
         
         results = []
@@ -183,15 +182,22 @@ class DataProcessor:
         valid_indices = self.elevation >= self.elevation_cutoff
         valid_roti = self.restless_roti[valid_indices]
         valid_timestamps = self.timestamps[valid_indices]
+        
+        splited_roti, splited_timestamps = self.__split_by_timestamp_threshold(valid_roti, valid_timestamps, self.timestamps_threshold)
 
         try:
-            if not self.__is_good_data(data=valid_roti, threshold=self.data_case_threshold):
-                logger.info(f"Data is bad in {station}-{satellite}")
-                return
+            delete_idx = []
+            for i, roti in enumerate(splited_roti):
+                if not self.__is_good_data(data=roti, threshold=self.data_case_threshold):
+                    logger.info(f"Data is bad in {station}-{satellite} {i} period")
+                    delete_idx.append(i)
+                    # splited_timestamps.pop(i)
+                    continue
+            splited_roti = np.delete(splited_roti, delete_idx)
+            splited_timestamps = np.delete(splited_timestamps, delete_idx)
         except ValueError as e:
             logger.error(f"{e}. {station}-{satellite}")
         
-        splited_roti, splited_timestamps = self.__split_by_timestamp_threshold(valid_roti, valid_timestamps, self.timestamps_threshold)
         self.__create_graphs_for_satellite(
             station, satellite, splited_roti, splited_timestamps
         )
@@ -208,11 +214,18 @@ class DataProcessor:
         """
         all_extremum_max, all_extremum_min = [], []
         all_max_index, all_min_index = [], []
+        
+        if len(splited_roti) <= 0:
+            logger.warning(f"There is no good data period in {station}-{satellite}")
+            return
 
         for roti_part in splited_roti:
             results = self.__calculate_std_series(roti_part, self.segment_length)
+            
             if results is None:
-                break
+                logger.warning(f"Data segment < than segment_length*2 in {station}-{satellite}")
+                continue
+            
             sko_a, sko_b = results[:, 1], results[:, 0]
 
             if None in sko_a or None in sko_b:
@@ -225,7 +238,8 @@ class DataProcessor:
             all_max_index.append(max_index)
             all_min_index.append(min_index)
             
-        if results is None:
+        if len(all_extremum_max) <= 0:
+            logger.warning(f"It is impossible to find extremums in {station}-{satellite}")
             return
         
         self.__plot_graphs(
@@ -288,20 +302,23 @@ class DataProcessor:
         invalid_roti = self.restless_roti[invalid_indices]
         invalid_timestamps = self.timestamps[invalid_indices]
         
+        splited_timestamps_one_dem = np.concatenate(splited_timestamps).astype(int)
+        
         valid_times = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in valid_timestamps]
         invalid_times = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in invalid_timestamps]
+        splited_times = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in splited_timestamps_one_dem]
         
         fig, axes = plt.subplots(3, 1, figsize=(10, 15), sharex=True)
 
         # Plot 1: extremum_max
-        axes[0].scatter(valid_times, extremum_max)
+        axes[0].scatter(splited_times, extremum_max)
         self.__highlight_extremums(axes[0], max_indices, splited_timestamps, "yellow", "green")
         axes[0].set_ylabel('sko_a/sko_b')
         axes[0].set_title(f'{station} - {satellite} - extremum_max')
         axes[0].grid(True, linestyle='--', alpha=0.5)
 
         # Plot 2: extremum_min
-        axes[1].scatter(valid_times, extremum_min)
+        axes[1].scatter(splited_times, extremum_min)
         self.__highlight_extremums(axes[1], min_indices, splited_timestamps, "yellow", "green")
         axes[1].set_ylabel('sko_b/sko_a')
         axes[1].set_title(f'{station} - {satellite} - extremum_min')
