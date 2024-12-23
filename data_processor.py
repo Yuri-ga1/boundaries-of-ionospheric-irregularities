@@ -5,6 +5,7 @@ import h5py as h5
 from datetime import datetime, timezone
 import numpy as np
 import os
+from typing import Optional
 
 from config import logger
 
@@ -49,6 +50,8 @@ class DataProcessor:
         self.restless_roti = None
         self.elevation = None
         self.timestamps = None
+        
+        self.file_name = None
         
     def __split_by_timestamp_threshold(self, data: np.ndarray, timestamps: np.ndarray, threshold: int):
         """
@@ -125,7 +128,8 @@ class DataProcessor:
             if len(segment1_filtered) * 2 <= segment_length:
                 sko_b = None
             else:
-                sko_b = np.std(segment1_filtered, ddof=1)
+                sko_b = np.median(segment1_filtered)
+                # sko_b = np.std(segment1_filtered, ddof=1)
             
             end_second = start + 2 * segment_length
             if end_second <= n:
@@ -135,18 +139,19 @@ class DataProcessor:
                 if len(segment2_filtered)  * 2 <= segment_length:
                     sko_a = None
                 else:
-                    sko_a = np.std(segment2_filtered, ddof=1)
+                    sko_a = np.median(segment2_filtered)
+                    # sko_a = np.std(segment2_filtered, ddof=1)
                     
                 results.append([sko_b, sko_a])
             else:
                 return np.array(results)
         
-    def __process_station(self, restless: h5.File, calm: h5.File, station: str):
+    def __process_station(self, restless: h5.File, calm: Optional[h5.File], station: str):
         """
         Processes data for a specific station.
 
         :param restless: h5py.File, the file containing restless station data.
-        :param calm: h5py.File, the file containing calm station data.
+        :param calm: Optional[h5py.File], the file containing calm station data, or None if not provided.
         :param station: str, name of the station.
         """
         station_loc = dict(restless[station].attrs)
@@ -159,21 +164,22 @@ class DataProcessor:
             self.__process_satellite(restless, calm, station, satellite)
 
 
-    def __process_satellite(self, restless: h5.File, calm: h5.File, station: str, satellite: str):
+    def __process_satellite(self, restless: h5.File, calm: Optional[h5.File], station: str, satellite: str):
         """
         Processes data for a specific satellite of a station.
 
         :param restless: h5py.File, the file containing restless satellite data.
-        :param calm: h5py.File, the file containing calm satellite data.
+        :param calm: Optional[h5py.File], the file containing calm satellite data, or None if not provided.
         :param station: str, name of the station.
         :param satellite: str, name of the satellite.
         """
         logger.info(f"Processing {station} - {satellite}")
-        try:
-            self.calm_roti = calm[station][satellite]['roti'][:]
-            self.calm_timestamps = calm[station][satellite]['timestamp'][:]
-        except Exception as e:
-            logger.error(f"There is no station or satelite on calm day. {station}-{satellite}")
+        if calm is not None:
+            try:
+                self.calm_roti = calm[station][satellite]['roti'][:]
+                self.calm_timestamps = calm[station][satellite]['timestamp'][:]
+            except Exception as e:
+                logger.error(f"There is no station or satelite on calm day. {station}-{satellite}")
         
         self.restless_roti = restless[station][satellite]['roti'][:]
         self.timestamps = restless[station][satellite]['timestamp'][:]
@@ -191,7 +197,6 @@ class DataProcessor:
                 if not self.__is_good_data(data=roti, threshold=self.data_case_threshold):
                     logger.info(f"Data is bad in {station}-{satellite} {i} period")
                     delete_idx.append(i)
-                    # splited_timestamps.pop(i)
                     continue
             splited_roti = np.delete(splited_roti, delete_idx)
             splited_timestamps = np.delete(splited_timestamps, delete_idx)
@@ -219,11 +224,12 @@ class DataProcessor:
             logger.warning(f"There is no good data period in {station}-{satellite}")
             return
 
-        for roti_part in splited_roti:
+        for roti_part, timestamp_part in zip(splited_roti, splited_timestamps):
             results = self.__calculate_std_series(roti_part, self.segment_length)
             
             if results is None:
                 logger.warning(f"Data segment < than segment_length*2 in {station}-{satellite}")
+                splited_timestamps = [x for x in splited_timestamps if not np.array_equal(x, timestamp_part)]
                 continue
             
             sko_a, sko_b = results[:, 1], results[:, 0]
@@ -346,7 +352,7 @@ class DataProcessor:
         
         
         if self.save_to_file:
-            station_dir = os.path.join('graphs', station)
+            station_dir = os.path.join('graphs', self.file_name, station)
             os.makedirs(station_dir, exist_ok=True)
             graph_path = os.path.join(station_dir, f'{station}_{satellite}.png')
             plt.savefig(graph_path)
@@ -387,7 +393,7 @@ class DataProcessor:
             axis.axvspan(max_after_start_time, max_after_end_time, color=color_after, alpha=0.3)
 
 
-    def run(self, restless_day: str, calm_day: str, stations: list = None):
+    def run(self, restless_day: str, calm_day: str = None, stations: list = None):
         """
         Main function to process the file and create graphs.
 
@@ -398,9 +404,20 @@ class DataProcessor:
         :param stations: list, stations to process.
         """ 
         with h5.File(restless_day, 'r') as restless:
-            with h5.File(calm_day, 'r') as calm:
-                if stations is None:
-                    stations = restless.keys()
+            self.file_name = restless.filename
+            
+            if stations is None:
+                stations = restless.keys()
                     
+            if calm_day is not None:
+                calm = h5.File(calm_day, 'r')
+            else:
+                calm = None
+            
+            try:
                 for station in stations:
                     self.__process_station(restless, calm, station)
+            finally:
+                if calm is not None:
+                    calm.close()
+                
