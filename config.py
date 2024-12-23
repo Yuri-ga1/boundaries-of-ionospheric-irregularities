@@ -1,6 +1,8 @@
 LON_CONDITION = -0.349066
 LAT_CONDITION = 0.680678
 
+DIRECTORY_PATH = 'files'
+
 #number of points in the segment by which we calculate std
 SEGMENT_LENGTH = 91
 
