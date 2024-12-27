@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import numpy as np
 import os
 from typing import Optional
+import traceback
 
 from config import logger
 
@@ -96,6 +97,18 @@ class DataProcessor:
         part2_meaning = np.median(part2)
         
         # Calculate the relative difference between the two parts
+        if part1_meaning is None or part2_meaning is None:
+            raise ValueError("One of the values ​​of part1_meaning or part2_meaning is None.")
+        
+        if not isinstance(part1_meaning, (int, float)) or not isinstance(part2_meaning, (int, float)):
+            raise TypeError("Both part1_meaning and part2_meaning must be numbers.")
+        
+        if np.isnan(part1_meaning) or np.isnan(part2_meaning):  # Проверка на NaN
+            raise ValueError("Одно из значений part1_meaning или part2_meaning равно NaN.")
+        
+        if max([part1_meaning, part2_meaning]) == 0:
+            raise ZeroDivisionError("Cannot perform division: maximum of part1_meaning and part2_meaning is 0.")
+        
         relative_difference = abs(part1_meaning - part2_meaning) / max([part1_meaning, part2_meaning])
         
         # Classify the data based on the threshold
@@ -114,7 +127,10 @@ class DataProcessor:
         :return: numpy.ndarray
             - Array of results with standard deviations [sko_b, sko_a] for each segment pair.
         """
-        n = len(series)
+        try:
+            n = len(series)
+        except Exception as e:
+            return None
         
         if n <= segment_length*2:
             return None
@@ -173,13 +189,13 @@ class DataProcessor:
         :param station: str, name of the station.
         :param satellite: str, name of the satellite.
         """
-        logger.info(f"Processing {station} - {satellite}")
+        logger.info(f"Processing {self.file_name}-{station}-{satellite}")
         if calm is not None:
             try:
                 self.calm_roti = calm[station][satellite]['roti'][:]
                 self.calm_timestamps = calm[station][satellite]['timestamp'][:]
             except Exception as e:
-                logger.error(f"There is no station or satelite on calm day. {station}-{satellite}")
+                logger.error(f"There is no station or satelite on calm day. {self.file_name}-{station}-{satellite}")
         
         self.restless_roti = restless[station][satellite]['roti'][:]
         self.timestamps = restless[station][satellite]['timestamp'][:]
@@ -194,14 +210,17 @@ class DataProcessor:
         try:
             delete_idx = []
             for i, roti in enumerate(splited_roti):
-                if not self.__is_good_data(data=roti, threshold=self.data_case_threshold):
-                    logger.info(f"Data is bad in {station}-{satellite} {i} period")
-                    delete_idx.append(i)
-                    continue
+                try:
+                    if not self.__is_good_data(data=roti, threshold=self.data_case_threshold):
+                        logger.info(f"Data is bad in {self.file_name}-{station}-{satellite} {i} period")
+                        delete_idx.append(i)
+                        continue
+                except Exception as e:
+                    logger.error(f"There is error in {self.file_name}-{station}-{satellite} {i} period\n {traceback.format_exc()}")
             splited_roti = np.delete(splited_roti, delete_idx)
             splited_timestamps = np.delete(splited_timestamps, delete_idx)
         except ValueError as e:
-            logger.error(f"{e}. {station}-{satellite}")
+            logger.error(f"{e}. {self.file_name}-{station}-{satellite}")
         
         self.__create_graphs_for_satellite(
             station, satellite, splited_roti, splited_timestamps
@@ -221,21 +240,21 @@ class DataProcessor:
         all_max_index, all_min_index = [], []
         
         if len(splited_roti) <= 0:
-            logger.warning(f"There is no good data period in {station}-{satellite}")
+            logger.warning(f"There is no good data period in {self.file_name}-{station}-{satellite}")
             return
 
         for roti_part, timestamp_part in zip(splited_roti, splited_timestamps):
             results = self.__calculate_std_series(roti_part, self.segment_length)
             
             if results is None:
-                logger.warning(f"Data segment < than segment_length*2 in {station}-{satellite}")
+                logger.warning(f"Data segment < than segment_length*2 in {self.file_name}-{station}-{satellite}")
                 splited_timestamps = [x for x in splited_timestamps if not np.array_equal(x, timestamp_part)]
                 continue
             
             sko_a, sko_b = results[:, 1], results[:, 0]
 
             if None in sko_a or None in sko_b:
-                logger.warning(f"None values in sko series for {station}-{satellite}")
+                logger.warning(f"None values in sko series for {self.file_name}-{station}-{satellite}")
                 continue
             
             extremum_max, extremum_min, max_index, min_index = self.__process_extremum(sko_a, sko_b, roti_part)
@@ -245,7 +264,7 @@ class DataProcessor:
             all_min_index.append(min_index)
             
         if len(all_extremum_max) <= 0:
-            logger.warning(f"It is impossible to find extremums in {station}-{satellite}")
+            logger.warning(f"It is impossible to find extremums in {self.file_name}-{station}-{satellite}")
             return
         
         self.__plot_graphs(
@@ -313,6 +332,10 @@ class DataProcessor:
         valid_times = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in valid_timestamps]
         invalid_times = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in invalid_timestamps]
         splited_times = [datetime.fromtimestamp(ts, tz=timezone.utc) for ts in splited_timestamps_one_dem]
+        
+        if len(splited_times) != len(extremum_max) or len(splited_times) != len(extremum_min):
+            logger.warning(f"splited_times and extremum_max/extremum_min has different size in {self.file_name}-{station}-{satellite}. splited_times.size = {len(splited_times)}, extremum_max = {len(extremum_max)}, extremum_max = {len(extremum_min)}")
+            return
         
         fig, axes = plt.subplots(3, 1, figsize=(10, 15), sharex=True)
 
