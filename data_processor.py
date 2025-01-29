@@ -135,32 +135,28 @@ class DataProcessor:
         if n <= segment_length*2:
             return None
         
-        results = []
-        for start in range(0, n - segment_length + 1):
-            # first segment
-            segment1 = series[start:start + segment_length]
-            segment1_filtered = segment1[segment1 != 0]
-            
-            if len(segment1_filtered) * 2 <= segment_length:
-                sko_b = None
-            else:
-                sko_b = np.median(segment1_filtered)
-                # sko_b = np.std(segment1_filtered, ddof=1)
-            
-            end_second = start + 2 * segment_length
-            if end_second <= n:
-                segment2 = series[start + segment_length:end_second]
-                segment2_filtered = segment2[segment2 != 0] 
-                
-                if len(segment2_filtered)  * 2 <= segment_length:
-                    sko_a = None
-                else:
-                    sko_a = np.median(segment2_filtered)
-                    # sko_a = np.std(segment2_filtered, ddof=1)
-                    
-                results.append([sko_b, sko_a])
-            else:
-                return np.array(results)
+        series_non_zero = np.where(series != 0, series, np.nan)
+        num_windows = n - 2 * segment_length + 1
+        
+        windows1 = np.lib.stride_tricks.sliding_window_view(series_non_zero, segment_length)[:num_windows]
+        windows2 = np.lib.stride_tricks.sliding_window_view(series_non_zero[segment_length:], segment_length)[:num_windows]
+        
+        count1 = np.sum(~np.isnan(windows1), axis=1)
+        count2 = np.sum(~np.isnan(windows2), axis=1)
+        
+        valid1 = count1 * 2 > segment_length
+        valid2 = count2 * 2 > segment_length
+        
+        median1 = np.nanmedian(windows1, axis=1)
+        median2 = np.nanmedian(windows2, axis=1)
+        
+        results = np.empty((num_windows, 2), dtype=object)
+        for i in range(num_windows):
+            sko_b = median1[i] if valid1[i] else None
+            sko_a = median2[i] if valid2[i] else None
+            results[i] = [sko_b, sko_a]
+        
+        return results
         
     def __process_station(self, restless: h5.File, calm: Optional[h5.File], station: str):
         """
