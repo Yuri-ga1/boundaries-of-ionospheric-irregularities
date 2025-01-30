@@ -8,7 +8,7 @@ import os
 from typing import Optional
 import traceback
 
-from config import logger
+from config import *
 
 class DataProcessor:
     def __init__(
@@ -97,22 +97,28 @@ class DataProcessor:
         
         :param file_path: str, path to the HDF5 file with points.
         """ 
+        self.file_name = os.path.basename(file_path)
+        
         with h5.File(file_path, 'r') as file:
-            self.file_name = file.filename
             data = file["data"]
-            points_group = data['2016-10-25 02:15:00.000000']
-            
-            filtered_points = self.__filter_points(points_group)
-            
-            logger.debug(f"Filtered data count = {len(filtered_points['vals'])} in file: {self.file_name}")
-            
-            sliding_windows = self.__apply_sliding_window(filtered_points)
-            
-            logger.info(f"Processed {len(sliding_windows)} sliding windows in file: {self.file_name}")
-            self.plot_results(sliding_windows)
+            for time_point in data.keys():
+                logger.debug(f"Processing {time_point} in {self.file_name}.")
+                points_group = data[time_point]
+                
+                filtered_points = self.__filter_points(points_group)
+                
+                window_heigth = WINDOW_AREA / WINDOW_WIDTH
+                
+                sliding_windows = self.__apply_sliding_window(
+                    filtered_points=filtered_points,
+                    window_size=(window_heigth, WINDOW_WIDTH),
+                    step=SEGMENT_MOVE_STEP
+                )
+                
+                self.plot_results(sliding_windows, time_point)
     
     
-    def plot_results(self, sliding_windows):
+    def plot_results(self, sliding_windows, time_point):
         """
         Plots a scatter plot of the processed data.
         
@@ -122,6 +128,8 @@ class DataProcessor:
         lat = [entry['lat'] for entry in sliding_windows]
         vals = [entry['vals'] for entry in sliding_windows]
         
+        safe_time_point = time_point.replace(":", "_")
+        
         cmap = plt.get_cmap("coolwarm")
         norm = plt.Normalize(0, 0.1)
         
@@ -130,10 +138,18 @@ class DataProcessor:
         plt.colorbar(scatter, label='Values')
         plt.xlabel("Longitude")
         plt.ylabel("Latitude")
-        plt.title("Scatter Plot of Processed Data")
+        plt.title(f"{safe_time_point}")
         
         if self.save_to_file:
-            plt.savefig("scatter_plot.png")
+            file_name_base = os.path.splitext(self.file_name)[0]
+    
+            graphs_dir = os.path.join('graphs', file_name_base)
+            os.makedirs(graphs_dir, exist_ok=True)
+            
+            graph_path = os.path.join(graphs_dir, f'{safe_time_point}.png')
+            
+            plt.savefig(graph_path)
+            plt.close()
         else:
             plt.show()
                 
