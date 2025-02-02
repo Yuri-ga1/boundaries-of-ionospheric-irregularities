@@ -39,6 +39,7 @@ class DataProcessor:
         self.save_to_file  = save_to_file 
         
         self.file_name = None
+        self.boundary_coords = None
         
         if self.save_to_file:
             import matplotlib
@@ -153,16 +154,23 @@ class DataProcessor:
         scatter = plt.scatter(lon, lat, c=vals, cmap=cmap, norm=norm, edgecolors=None)
         plt.colorbar(scatter, label='Values')
 
+        boundary_data = {
+            'lat': [],
+            'lon': []
+        }
+
         if not np.all(np.isnan(zi)):
-            cs = plt.contour(
-                xi, 
-                yi, 
-                zi, 
-                levels=[self.boundary_condition], 
-                colors='black', 
-                linestyles='dashed', 
-                linewidths=2
-            )
+            cs = plt.contour(xi, yi, zi, levels=[self.boundary_condition], colors='black', linestyles='dashed', linewidths=2)
+            
+            if cs is not None:
+                contour_segments = cs.allsegs[0]
+                
+                for segment in contour_segments:
+                    if len(segment) > 0:
+                        boundary_data['lon'].extend(segment[:, 0].tolist())
+                        boundary_data['lat'].extend(segment[:, 1].tolist())
+
+        self.boundary_coords = boundary_data
 
         plt.xlabel("Longitude")
         plt.ylabel("Latitude")
