@@ -130,7 +130,6 @@ class DataProcessor:
         
         :param sliding_windows: List of processed data segments.
         """
-
         lon = np.array([entry['lon'] for entry in sliding_windows])
         lat = np.array([entry['lat'] for entry in sliding_windows])
         vals = np.array([entry['vals'] for entry in sliding_windows])
@@ -154,23 +153,36 @@ class DataProcessor:
         scatter = plt.scatter(lon, lat, c=vals, cmap=cmap, norm=norm, edgecolors=None)
         plt.colorbar(scatter, label='Values')
 
-        boundary_data = {
-            'lat': [],
-            'lon': []
-        }
+        boundary_data = {'lat': [], 'lon': []}
 
         if not np.all(np.isnan(zi)):
-            cs = plt.contour(xi, yi, zi, levels=[self.boundary_condition], colors='black', linestyles='dashed', linewidths=2)
+            cs = plt.contour(
+                xi, yi, zi, 
+                levels=[self.boundary_condition], 
+                colors='black', 
+                linewidths=2
+            )
             
             if cs is not None:
-                contour_segments = cs.allsegs[0]
+                for coll in cs.collections:
+                    coll.remove()
                 
+                contour_segments = cs.allsegs[0]
                 for segment in contour_segments:
                     if len(segment) > 0:
                         boundary_data['lon'].extend(segment[:, 0].tolist())
                         boundary_data['lat'].extend(segment[:, 1].tolist())
-
-        self.boundary_coords = boundary_data
+            
+            if boundary_data['lon'] and boundary_data['lat']:
+                self.boundary_coords = boundary_data
+                
+                plt.scatter(
+                    boundary_data['lon'], 
+                    boundary_data['lat'], 
+                    color='black',
+                    label=f'boundary'
+                )
+                plt.legend()
 
         plt.xlabel("Longitude")
         plt.ylabel("Latitude")
