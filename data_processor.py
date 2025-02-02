@@ -8,6 +8,8 @@ import os
 from typing import Optional
 import traceback
 
+from scipy.interpolate import griddata
+
 from config import *
 
 class DataProcessor:
@@ -15,7 +17,9 @@ class DataProcessor:
         self,
         lon_condition: float,
         lat_condition: float,
-        segment_move_step: float,
+        segment_lon_step: float,
+        segment_lat_step: float,
+        boundary_condition: float,
         save_to_file : bool = False
     ):
         """
@@ -23,12 +27,15 @@ class DataProcessor:
 
         :param lon_condition: float, longitude condition for pole proximity.
         :param lat_condition: float, latitude condition for pole proximity.
-        :param segment_move_step: float, length of segments for standard deviation calculation.
+        :param segment_lon_step: float, sliding window step in longitude.
+        :param segment_lat_step: float, sliding window step in latitude.
         :param save_to_file : bool, whether to save graphs to file or show them.
         """
         self.lon_condition = lon_condition
         self.lat_condition = lat_condition
-        self.segment_move_step = segment_move_step
+        self.segment_lon_step = segment_lon_step
+        self.segment_lat_step = segment_lat_step
+        self.boundary_condition = boundary_condition
         self.save_to_file  = save_to_file 
         
         self.file_name = None
@@ -52,13 +59,12 @@ class DataProcessor:
         
         return filtered_points
     
-    def __apply_sliding_window(self, filtered_points, window_size=(5, 10), step=0.2):
+    def __apply_sliding_window(self, filtered_points, window_size=(5, 10)):
         """
         Applies a sliding window approach to segment the data.
 
         :param filtered_points: dict, containing 'lon', 'lat', and 'vals'.
         :param window_size: tuple, defining (lat, lon) window size.
-        :param step: float, step size in degrees.
         :return: List of windowed data segments.
         """
         lon = filtered_points['lon']
@@ -84,9 +90,9 @@ class DataProcessor:
                         'vals': np.median(vals[mask])
                     })
                 
-                current_lon += step
+                current_lon += self.segment_lon_step
             
-            current_lat += 1.0
+            current_lat += self.segment_lat_step
             
         return windows
 
@@ -112,7 +118,6 @@ class DataProcessor:
                 sliding_windows = self.__apply_sliding_window(
                     filtered_points=filtered_points,
                     window_size=(window_heigth, WINDOW_WIDTH),
-                    step=SEGMENT_MOVE_STEP
                 )
                 
                 self.plot_results(sliding_windows, time_point)
@@ -120,29 +125,52 @@ class DataProcessor:
     
     def plot_results(self, sliding_windows, time_point):
         """
-        Plots a scatter plot of the processed data.
+        Plots a scatter plot with a contour line at boundary_condition value.
         
         :param sliding_windows: List of processed data segments.
         """
-        lon = [entry['lon'] for entry in sliding_windows]
-        lat = [entry['lat'] for entry in sliding_windows]
-        vals = [entry['vals'] for entry in sliding_windows]
-        
+
+        lon = np.array([entry['lon'] for entry in sliding_windows])
+        lat = np.array([entry['lat'] for entry in sliding_windows])
+        vals = np.array([entry['vals'] for entry in sliding_windows])
+
         safe_time_point = time_point.replace(":", "_")
-        
+
+        grid_points = 100
+        xi = np.linspace(lon.min(), lon.max(), grid_points)
+        yi = np.linspace(lat.min(), lat.max(), grid_points)
+        zi = griddata(
+            (lon, lat), 
+            vals, 
+            (xi[None, :], yi[:, None]), 
+            method='linear', 
+            fill_value=np.nan
+        )
+
+        plt.figure(figsize=(10, 6))
         cmap = plt.get_cmap("coolwarm")
         norm = plt.Normalize(0, 0.1)
-        
-        plt.figure(figsize=(10, 6))
         scatter = plt.scatter(lon, lat, c=vals, cmap=cmap, norm=norm, edgecolors='k')
         plt.colorbar(scatter, label='Values')
+
+        if not np.all(np.isnan(zi)):
+            cs = plt.contour(
+                xi, 
+                yi, 
+                zi, 
+                levels=[self.boundary_condition], 
+                colors='yellow', 
+                linestyles='dashed', 
+                linewidths=2
+            )
+
         plt.xlabel("Longitude")
         plt.ylabel("Latitude")
-        plt.title(f"{safe_time_point}")
-        
+        plt.title(f"{safe_time_point} with {self.boundary_condition} Boundary")
+
         if self.save_to_file:
             file_name_base = os.path.splitext(self.file_name)[0]
-    
+            
             graphs_dir = os.path.join('graphs', file_name_base)
             os.makedirs(graphs_dir, exist_ok=True)
             
