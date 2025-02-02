@@ -8,8 +8,10 @@ if __name__ == "__main__":
     data_processor = DataProcessor(
         lon_condition=LON_CONDITION,
         lat_condition=LAT_CONDITION,
-        segment_move_step=SEGMENT_MOVE_STEP,
-        save_to_file=True
+        segment_lon_step=SEGMENT_LON_STEP,
+        segment_lat_step=SEGMENT_LAT_STEP,
+        boundary_condition=BOUNDARY_CONDITION,
+        save_to_file=False
     )
     
     for root, dirs, files in os.walk(DIRECTORY_PATH):
