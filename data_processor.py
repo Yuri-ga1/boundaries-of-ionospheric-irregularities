@@ -150,7 +150,7 @@ class DataProcessor:
         plt.figure(figsize=(10, 6))
         cmap = plt.get_cmap("coolwarm")
         norm = plt.Normalize(0, 0.1)
-        scatter = plt.scatter(lon, lat, c=vals, cmap=cmap, norm=norm, edgecolors='k')
+        scatter = plt.scatter(lon, lat, c=vals, cmap=cmap, norm=norm, edgecolors=None)
         plt.colorbar(scatter, label='Values')
 
         if not np.all(np.isnan(zi)):
@@ -159,7 +159,7 @@ class DataProcessor:
                 yi, 
                 zi, 
                 levels=[self.boundary_condition], 
-                colors='yellow', 
+                colors='black', 
                 linestyles='dashed', 
                 linewidths=2
             )
