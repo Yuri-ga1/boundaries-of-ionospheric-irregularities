@@ -1,12 +1,7 @@
 import matplotlib.pyplot as plt
-from matplotlib.dates import DateFormatter
-from matplotlib.axes import Axes
 import h5py as h5
-from datetime import datetime, timezone
 import numpy as np
 import os
-from typing import Optional
-import traceback
 
 from scipy.interpolate import griddata
 
@@ -98,7 +93,7 @@ class DataProcessor:
         return windows
 
 
-    def run(self, file_path: str):
+    def process(self, file_path: str):
         """
         Main function to process the file.
         
