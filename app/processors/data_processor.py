@@ -91,45 +91,11 @@ class DataProcessor:
             current_lat += self.segment_lat_step
             
         return windows
-
-
-    def process(self, file_path: str):
-        """
-        Main function to process the file.
-        
-        :param file_path: str, path to the HDF5 file with points.
-        """ 
-        self.file_name = os.path.basename(file_path)
-        
-        with h5.File(file_path, 'r') as file:
-            data = file["data"]
-            for time_point in data.keys():
-                logger.debug(f"Processing {time_point} in {self.file_name}.")
-                points_group = data[time_point]
-                
-                filtered_points = self.__filter_points(points_group)
-                
-                window_heigth = WINDOW_AREA / WINDOW_WIDTH
-                
-                sliding_windows = self.__apply_sliding_window(
-                    filtered_points=filtered_points,
-                    window_size=(window_heigth, WINDOW_WIDTH),
-                )
-                
-                self.plot_results(sliding_windows, time_point)
     
-    
-    def plot_results(self, sliding_windows, time_point):
-        """
-        Plots a scatter plot with a contour line at boundary_condition value.
-        
-        :param sliding_windows: List of processed data segments.
-        """
+    def __get_boundary_data(self, sliding_windows):
         lon = np.array([entry['lon'] for entry in sliding_windows])
         lat = np.array([entry['lat'] for entry in sliding_windows])
         vals = np.array([entry['vals'] for entry in sliding_windows])
-
-        safe_time_point = time_point.replace(":", "_")
 
         grid_points = 100
         xi = np.linspace(lon.min(), lon.max(), grid_points)
@@ -141,56 +107,162 @@ class DataProcessor:
             method='linear', 
             fill_value=np.nan
         )
+        
+        boundary_data = {'lat': [], 'lon': []}
+            
+        if np.all(np.isnan(zi)):
+            return boundary_data
+        
+        plt.figure()
+        cs = plt.contour(xi, yi, zi, levels=[self.boundary_condition])
+        plt.close()
 
-        plt.figure(figsize=(10, 6))
+        if len(cs.allsegs) > 0:
+            contour_segments = cs.allsegs[0]
+            for segment in contour_segments:
+                if len(segment) > 0:
+                    boundary_data['lon'].extend(segment[:, 0].tolist())
+                    boundary_data['lat'].extend(segment[:, 1].tolist())
+        
+        return boundary_data
+
+
+    def process(self, file_path: str, roti_data, time_points = None):
+        """
+        Main function to process the file.
+        
+        :param file_path: str, path to the HDF5 file with points.
+        """ 
+        self.file_name = os.path.basename(file_path)
+        result = {}
+        with h5.File(file_path, 'r') as file:
+            
+            data = file["data"]
+            if time_points is None:
+                time_points = data.keys()
+                
+            for time_point in time_points:
+                logger.info(f"Processing {time_point} in {self.file_name}.")
+                points_group = data[time_point]
+                
+                filtered_points = self.__filter_points(points_group)
+                
+                window_heigth = WINDOW_AREA / WINDOW_WIDTH
+                
+                sliding_windows = self.__apply_sliding_window(
+                    filtered_points=filtered_points,
+                    window_size=(window_heigth, WINDOW_WIDTH),
+                )
+                
+                boundary_data = self.__get_boundary_data(sliding_windows)
+                # self.plot_combined_results(
+                #     sliding_windows=sliding_windows,
+                #     time_point=time_point,
+                #     boundary_data=boundary_data,
+                #     roti_data=roti_data
+                # )
+                
+                result[time_point] = {
+                    'boundary_data': boundary_data,
+                    'sliding_windows': sliding_windows,
+                }
+                
+            self.plot_roti(
+                time_point="2019-05-14 02:10:00.000000",
+                roti_data=roti_data
+            )
+            return result
+                
+    def plot_roti(self, time_point, roti_data):
+        """
+        Plots two graphs: on the left, a scatter plot of sliding windows with boundaries, and on the right, a ROTI map for each timestamp.
+        
+        :param sliding_windows: A list of processed data segments from the sliding window.
+        :param boundary_data_dict: A dictionary with time_point keys and values containing boundary data ('lon', 'lat').
+        :param roti_data: A dictionary with ROTI data, where the key is a timestamp, and the value is a list of points {'lat', 'lon', 'roti'}.
+        """
+        
+        logger.debug("ploting results")
+
+        safe_time_point = time_point.replace(":", "_")
+
         cmap = plt.get_cmap("coolwarm")
         norm = plt.Normalize(0, 0.1)
-        scatter = plt.scatter(lon, lat, c=vals, cmap=cmap, norm=norm, edgecolors=None)
-        plt.colorbar(scatter, label='Values')
 
-        boundary_data = {'lat': [], 'lon': []}
-
-        if not np.all(np.isnan(zi)):
-            cs = plt.contour(
-                xi, yi, zi, 
-                levels=[self.boundary_condition], 
-                colors='black', 
-                linewidths=2
-            )
+        # roti_key = f'{time_point}'
+        roti_key = f'{time_point[:-7]}+00:00'
+        roti_points = roti_data[roti_key]
+        lats = [point['lat'] for point in roti_points]
+        lons = [point['lon'] for point in roti_points]
+        rotis = [point['roti'] for point in roti_points]
             
-            if cs is not None:
-                for coll in cs.collections:
-                    coll.remove()
-                
-                contour_segments = cs.allsegs[0]
-                for segment in contour_segments:
-                    if len(segment) > 0:
-                        boundary_data['lon'].extend(segment[:, 0].tolist())
-                        boundary_data['lat'].extend(segment[:, 1].tolist())
-            
-            if boundary_data['lon'] and boundary_data['lat']:
-                self.boundary_coords = boundary_data
-                
-                plt.scatter(
-                    boundary_data['lon'], 
-                    boundary_data['lat'], 
-                    color='black',
-                    label=f'boundary'
-                )
-                plt.legend()
-
-        plt.xlabel("Longitude")
-        plt.ylabel("Latitude")
-        plt.title(f"{safe_time_point} with {self.boundary_condition} Boundary")
+        plt.scatter(lons, lats, c=rotis, cmap=cmap, norm=norm, marker='o', edgecolors='black')
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
+        plt.title(f'ROTI Map at {time_point}')
+        plt.grid(True)
 
         if self.save_to_file:
             file_name_base = os.path.splitext(self.file_name)[0]
-            
             graphs_dir = os.path.join('graphs', file_name_base)
             os.makedirs(graphs_dir, exist_ok=True)
-            
             graph_path = os.path.join(graphs_dir, f'{safe_time_point}.png')
+            plt.savefig(graph_path)
+            plt.close()
+        else:
+            plt.show()
+    
+    def plot_combined_results(self, sliding_windows, boundary_data, time_point, roti_data):
+        """
+        Plots two graphs: on the left, a scatter plot of sliding windows with boundaries, and on the right, a ROTI map for each timestamp.
+        
+        :param sliding_windows: A list of processed data segments from the sliding window.
+        :param boundary_data_dict: A dictionary with time_point keys and values containing boundary data ('lon', 'lat').
+        :param roti_data: A dictionary with ROTI data, where the key is a timestamp, and the value is a list of points {'lat', 'lon', 'roti'}.
+        """
+        
+        logger.debug("ploting results")
+        lon = np.array([entry['lon'] for entry in sliding_windows])
+        lat = np.array([entry['lat'] for entry in sliding_windows])
+        vals = np.array([entry['vals'] for entry in sliding_windows])
+
+        safe_time_point = time_point.replace(":", "_")
+        
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+        cmap = plt.get_cmap("coolwarm")
+        norm = plt.Normalize(0, 0.1)
+        scatter = axes[0].scatter(lon, lat, c=vals, cmap=cmap, norm=norm, edgecolors=None)
+        axes[0].set_xlabel("Longitude")
+        axes[0].set_ylabel("Latitude")
+        axes[0].set_title(f"{safe_time_point}")
+        fig.colorbar(scatter, ax=axes[0], label='ROTI')
+
+        # roti_key = f'{time_point}'
+        roti_key = f'{time_point[:-7]}+00:00'
+        roti_points = roti_data[roti_key]
+        lats = [point['lat'] for point in roti_points]
+        lons = [point['lon'] for point in roti_points]
+        rotis = [point['roti'] for point in roti_points]
             
+        axes[1].scatter(lons, lats, c=rotis, cmap=cmap, norm=norm, marker='o', edgecolors='black')
+        axes[1].set_xlabel('Longitude')
+        axes[1].set_ylabel('Latitude')
+        axes[1].set_title(f'ROTI Map at {time_point}')
+        axes[1].grid(True)
+        fig.colorbar(scatter, ax=axes[1], label='ROTI')
+        
+        if boundary_data['lon'] and boundary_data['lat']:
+            axes[0].scatter(boundary_data['lon'], boundary_data['lat'], color='black', label=f'{self.boundary_condition} boundary')
+            axes[1].scatter(boundary_data['lon'], boundary_data['lat'], color='black', label=f'{self.boundary_condition} boundary')
+        axes[0].legend()
+        axes[1].legend()
+
+        if self.save_to_file:
+            file_name_base = os.path.splitext(self.file_name)[0]
+            graphs_dir = os.path.join('graphs', file_name_base)
+            os.makedirs(graphs_dir, exist_ok=True)
+            graph_path = os.path.join(graphs_dir, f'{safe_time_point}.png')
             plt.savefig(graph_path)
             plt.close()
         else:
