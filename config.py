@@ -10,7 +10,7 @@ WINDOW_WIDTH=10
 WINDOW_AREA = 50
 
 RE_KM = 6356
-HM = 3000
+HM = 300
 
 import os
 DIRECTORY_PATH =  os.path.join("files", "meshing")
