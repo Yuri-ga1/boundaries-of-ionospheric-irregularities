@@ -44,19 +44,6 @@ class RinexProcessor:
         els = els[el_mask]
         ts = ts[el_mask]
         
-        datetimes = [dt.fromtimestamp(float(t), datetime.UTC) for t in ts]
-        try:
-            i = datetimes.index(dt(2019, 5, 14, 2, 10, tzinfo=datetime.UTC))
-        except Exception as e:
-            return None
-        
-        
-        
-        roti = [roti[i]]
-        azs = [azs[i]]
-        els = [els[i]]
-        ts = [ts[i]]
-        
         st_coords = self.stations_coords[station_name]
         
         all_lat, all_lon = [], []
@@ -70,21 +57,16 @@ class RinexProcessor:
             all_lat.append(lat)
             all_lon.append(lon)
         
-        # all_lat = np.degrees(all_lat)
-        # all_lon = np.degrees(all_lon)
-        #mask = (all_lon >= -120) & (all_lon <= self.lon_condition) & (all_lat >= self.lat_condition) & (ts % 300 == 0)
+        all_lat = np.degrees(all_lat)
+        all_lon = np.degrees(all_lon)
+        mask = (all_lon >= -120) & (all_lon <= self.lon_condition) & (all_lat >= self.lat_condition) & (ts % 300 == 0)
+        
         return {
-            'roti': roti,
-            'lat': all_lat,
-            'lon': all_lon,
-            'timestamp': ts
+            'vals': roti[mask],
+            'lat': all_lat[mask],
+            'lon': all_lon[mask],
+            'timestamp': ts[mask]
         }
-        # return {
-        #     'roti': roti[mask],
-        #     'lat': all_lat[mask],
-        #     'lon': all_lon[mask],
-        #     'timestamp': ts[mask]
-        # }
     
     @staticmethod 
     def __az_el_to_lat_lon(s_lat, s_lon, az, el,  hm=HM, R=RE_KM):
@@ -106,6 +88,21 @@ class RinexProcessor:
         lon = lon + 2 * np.pi if lon < -np.pi else lon
         return lat, lon
 
+    def sort_dict(self, d):
+        """
+        Recursively sorts a nested dictionary by its keys.
+        
+        Parameters:
+            d (dict): The dictionary to be sorted. Can contain nested dictionaries.
+        
+        Returns:
+            OrderedDict: A new dictionary with all levels sorted by keys.
+        """
+        if isinstance(d, dict):
+            return OrderedDict(
+                sorted((key, self.sort_dict(value)) for key, value in d.items())
+            )
+        return d
         
     def process(self):
         processed_data  = {}
@@ -119,18 +116,19 @@ class RinexProcessor:
                 if result is None:
                     continue
                 
+                st_sat = f"{station_name}_{satellite_name}"
                 for i in range(len(result['timestamp'])):
-                    ts = dt.fromtimestamp(float(result['timestamp'][i]), datetime.UTC)
-                    ts = str(ts)
+                    ts = dt.fromtimestamp(float(result['timestamp'][i]), datetime.UTC).strftime('%Y-%m-%d %H:%M:%S.%f')
+                    
                     entry = {
-                        'station': station_name,
-                        'satellite': satellite_name,
-                        'roti': result['roti'][i],
+                        'vals': result['vals'][i],
                         'lat': result['lat'][i],
                         'lon': result['lon'][i]
                     }
-                    if ts not in processed_data:
-                        processed_data[ts] = []
-                    processed_data[ts].append(entry)
                     
-        self.data = OrderedDict(sorted(processed_data.items()))
+                    if ts not in processed_data:
+                        processed_data[ts] = {}
+                        
+                    processed_data[ts][st_sat] = entry
+                    
+        self.data = self.sort_dict(processed_data)
