@@ -12,6 +12,8 @@ WINDOW_AREA = 50
 RE_KM = 6356
 HM = 300
 
+MIN_CLUSTER_SIZE = 100
+
 import os
 DIRECTORY_PATH =  os.path.join("files", "meshing")
 

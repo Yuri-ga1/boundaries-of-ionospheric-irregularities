@@ -3,6 +3,10 @@ import h5py as h5
 import numpy as np
 import os
 
+from copy import deepcopy
+from sklearn.cluster import DBSCAN
+from collections import Counter
+
 from scipy.interpolate import griddata
 
 from config import *
@@ -125,9 +129,115 @@ class DataProcessor:
                     boundary_data['lat'].extend(segment[:, 1].tolist())
         
         return boundary_data
+    
+    
+    def __delete_circle(self, data):
+        first_col_abs = np.abs(data[:, 0])
+        
+        increasing = first_col_abs[1] > first_col_abs[0]
+        
+        if increasing:
+            max_index = np.argmax(first_col_abs)
+            mask = (np.arange(len(data)) <= max_index) | np.any(data == 0, axis=1)
+        else:
+            min_index = np.argmin(first_col_abs)
+            mask = (np.arange(len(data)) <= min_index) | np.any(data == 90, axis=1)
+        
+        return data[mask]
 
+    def __create_boundary_clusters(self, lat_list, lon_list, min_cluster_size=MIN_CLUSTER_SIZE):
+        dbscan = DBSCAN(eps=0.7, min_samples=3)
+        filtered_boundary_data = {}
+            
+        if lat_list and lon_list:
+            column_coords = np.column_stack((lon_list, lat_list))
+            labels = dbscan.fit_predict(column_coords)
+            
+            label_counts = Counter(labels)
+            del label_counts[-1]  # Убираем шум (-1)
+            
+            if len(label_counts) >= 2:
+                top_clusters = [label for label, _ in label_counts.most_common(2)]
+            else:
+                top_clusters = list(label_counts.keys())
+            
+            valid_clusters = [label for label in top_clusters if label_counts[label] >= min_cluster_size]
+            
+            if len(valid_clusters) == 2:
+                cluster1 = column_coords[labels == valid_clusters[0]]
+                cluster2 = column_coords[labels == valid_clusters[1]]
+                
+                cluster1_center = np.mean(cluster1, axis=0)
+                cluster2_center = np.mean(cluster2, axis=0)
+                
+                if abs(cluster1_center[0] - cluster2_center[0]) > abs(cluster1_center[1] - cluster2_center[1]):
+                    relation = "left-right"
+                else:
+                    relation = "top-bottom"
+                
+                if relation == "top-bottom":
+                    if cluster1_center[1] > cluster2_center[1]:
+                        top_cluster = cluster1
+                        bottom_cluster = cluster2
+                    else:
+                        top_cluster = cluster2
+                        bottom_cluster = cluster1
+                    
+                    left_edge_top_cluster = deepcopy(min(top_cluster, key=lambda p: (p[0])))
+                    right_edge_top_cluster = deepcopy(max(top_cluster, key=lambda p: (p[0])))
+                    left_edge_bottom_cluster= deepcopy(min(bottom_cluster, key=lambda p: (p[0])))
+                    right_edge_bottom_cluster = deepcopy(max(bottom_cluster, key=lambda p: (p[0])))
+                    
+                    if abs(left_edge_bottom_cluster[0]) > abs(left_edge_top_cluster[0]):
+                        left_edge_top_cluster[0] = left_edge_bottom_cluster[0]
+                        top_cluster = np.insert(top_cluster, len(top_cluster), left_edge_top_cluster, axis=0)
+                        
+                    if abs(right_edge_top_cluster[0]) > abs(right_edge_bottom_cluster[0]):
+                        right_edge_top_cluster[0] = right_edge_bottom_cluster[0]
+                        top_cluster = np.insert(top_cluster, 0, right_edge_top_cluster, axis=0)
+                    
+                    left_edge_top_cluster[1], right_edge_top_cluster[1] = 0, 0
+                    left_edge_bottom_cluster[1], right_edge_bottom_cluster[1] = 90, 90
+                    
+                    top_cluster = np.insert(top_cluster, len(top_cluster), left_edge_top_cluster, axis=0)
+                    top_cluster = np.insert(top_cluster, len(top_cluster), right_edge_top_cluster, axis=0)
+                    bottom_cluster = np.insert(bottom_cluster, 0, left_edge_bottom_cluster, axis=0)
+                    bottom_cluster = np.insert(bottom_cluster, len(bottom_cluster), right_edge_bottom_cluster, axis=0)
+                    
+                    cluster1 = self.__delete_circle(top_cluster).tolist()
+                    cluster2 = self.__delete_circle(bottom_cluster).tolist()
+                    
+                    if len(cluster1) < 100 or len(cluster2) < 100:
+                        return None
+                    
+                    return {
+                        "relation": relation,
+                        "border1": cluster1,
+                        "border2": cluster2,
+                    }
 
-    def process(self, file_path: str, roti_data, time_points = None):
+                else:
+                    if cluster1_center[0] < cluster2_center[0]:
+                        left_cluster = cluster1
+                        right_cluster = cluster2
+                    else:
+                        left_cluster = cluster2
+                        right_cluster = cluster1
+                        
+                    # bottom_left = min(left_cluster, key=lambda p: (p[0], -p[1]))
+                    # top_left = max(left_cluster, key=lambda p: (p[0], -p[1]))
+                    # bottom_right = min(right_cluster, key=lambda p: (-p[0], p[1]))
+                    # top_right = max(right_cluster, key=lambda p: (p[0], p[1]))
+                
+                    return {
+                        "relation": relation,
+                        "border1": cluster1.tolist(),
+                        "border2": cluster2.tolist(),
+                    }
+        
+        return filtered_boundary_data
+
+    def process(self, file_path: str, roti_data = None, time_points = None):
         """
         Main function to process the file.
         
@@ -160,57 +270,23 @@ class DataProcessor:
                 #     time_point=time_point,
                 #     boundary_data=boundary_data,
                 #     roti_data=roti_data
+                #     roti_data={time_point: filtered_points}
                 # )
                 
-                result[time_point] = {
-                    'boundary_data': boundary_data,
-                    'sliding_windows': sliding_windows,
-                }
+                # self.plot_roti(
+                #     map_points=filtered_points,
+                #     time_point=time_point,
+                #     roti_data=roti_data
+                # )
                 
-            self.plot_roti(
-                time_point="2019-05-14 02:10:00.000000",
-                roti_data=roti_data
-            )
-            return result
-                
-    def plot_roti(self, time_point, roti_data):
-        """
-        Plots two graphs: on the left, a scatter plot of sliding windows with boundaries, and on the right, a ROTI map for each timestamp.
+                result[time_point] = self.__create_boundary_clusters(
+                    lat_list=boundary_data['lat'],
+                    lon_list=boundary_data['lon']
+                )
+                    
         
-        :param sliding_windows: A list of processed data segments from the sliding window.
-        :param boundary_data_dict: A dictionary with time_point keys and values containing boundary data ('lon', 'lat').
-        :param roti_data: A dictionary with ROTI data, where the key is a timestamp, and the value is a list of points {'lat', 'lon', 'roti'}.
-        """
-        
-        logger.debug("ploting results")
-
-        safe_time_point = time_point.replace(":", "_")
-
-        cmap = plt.get_cmap("coolwarm")
-        norm = plt.Normalize(0, 0.1)
-
-        # roti_key = f'{time_point}'
-        roti_key = f'{time_point[:-7]}+00:00'
-        roti_points = roti_data[roti_key]
-        lats = [point['lat'] for point in roti_points]
-        lons = [point['lon'] for point in roti_points]
-        rotis = [point['roti'] for point in roti_points]
+        return result
             
-        plt.scatter(lons, lats, c=rotis, cmap=cmap, norm=norm, marker='o', edgecolors='black')
-        plt.xlabel('Longitude')
-        plt.ylabel('Latitude')
-        plt.title(f'ROTI Map at {time_point}')
-        plt.grid(True)
-
-        if self.save_to_file:
-            file_name_base = os.path.splitext(self.file_name)[0]
-            graphs_dir = os.path.join('graphs', file_name_base)
-            os.makedirs(graphs_dir, exist_ok=True)
-            graph_path = os.path.join(graphs_dir, f'{safe_time_point}.png')
-            plt.savefig(graph_path)
-            plt.close()
-        else:
-            plt.show()
     
     def plot_combined_results(self, sliding_windows, boundary_data, time_point, roti_data):
         """
@@ -238,12 +314,13 @@ class DataProcessor:
         axes[0].set_title(f"{safe_time_point}")
         fig.colorbar(scatter, ax=axes[0], label='ROTI')
 
-        # roti_key = f'{time_point}'
-        roti_key = f'{time_point[:-7]}+00:00'
-        roti_points = roti_data[roti_key]
-        lats = [point['lat'] for point in roti_points]
-        lons = [point['lon'] for point in roti_points]
-        rotis = [point['roti'] for point in roti_points]
+        roti_points = roti_data[time_point]
+        lons = roti_points['lon'][()]
+        lats = roti_points['lat'][()]
+        rotis = roti_points['vals'][()]
+        # lats = [point['lat'] for point in roti_points]
+        # lons = [point['lon'] for point in roti_points]
+        # rotis = [point['vals'] for point in roti_points]
             
         axes[1].scatter(lons, lats, c=rotis, cmap=cmap, norm=norm, marker='o', edgecolors='black')
         axes[1].set_xlabel('Longitude')
@@ -262,6 +339,54 @@ class DataProcessor:
             file_name_base = os.path.splitext(self.file_name)[0]
             graphs_dir = os.path.join('graphs', file_name_base)
             os.makedirs(graphs_dir, exist_ok=True)
+            graph_path = os.path.join(graphs_dir, f'{safe_time_point}.png')
+            plt.savefig(graph_path)
+            plt.close()
+        else:
+            plt.show()
+            
+    def plot_roti(self, map_points, time_point, roti_data):
+        """
+        Plots two graphs: on the left, a scatter plot of sliding windows with boundaries, and on the right, a ROTI map for each timestamp.
+        
+        :param sliding_windows: A list of processed data segments from the sliding window.
+        :param boundary_data_dict: A dictionary with time_point keys and values containing boundary data ('lon', 'lat').
+        :param roti_data: A dictionary with ROTI data, where the key is a timestamp, and the value is a list of points {'lat', 'lon', 'roti'}.
+        """
+        
+        logger.debug("ploting results")
+        map_lons = map_points['lon'][()]
+        map_lats = map_points['lat'][()]
+        map_vals = map_points['vals'][()]
+        
+        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+        cmap = plt.get_cmap("coolwarm")
+        norm = plt.Normalize(0, 0.1)
+        scatter1 = axes[0].scatter(map_lons, map_lats, c=map_vals, cmap=cmap, norm=norm, marker='o', edgecolors='black')
+        axes[0].set_xlabel('Longitude')
+        axes[0].set_ylabel('Latitude')
+        axes[0].set_title(f'Map points at {time_point}')
+        axes[0].grid(True)
+        fig.colorbar(scatter1, ax=axes[0], label='ROTI')
+
+        roti_points = roti_data[time_point]
+        lats = [point['lat'] for point in roti_points]
+        lons = [point['lon'] for point in roti_points]
+        rotis = [point['roti'] for point in roti_points]
+            
+        norm = plt.Normalize(0, 0.35)
+        scatter2 = axes[1].scatter(lons, lats, c=rotis, cmap=cmap, norm=norm, marker='o', edgecolors='black')
+        axes[1].set_xlabel('Longitude')
+        axes[1].set_ylabel('Latitude')
+        axes[1].set_title(f'ROTI at {time_point}')
+        axes[1].grid(True)
+        fig.colorbar(scatter2, ax=axes[1], label='ROTI')
+
+        if self.save_to_file:
+            graphs_dir = os.path.join('graphs', 'map_vs_roti')
+            os.makedirs(graphs_dir, exist_ok=True)
+            safe_time_point = time_point.replace(":", "_")
             graph_path = os.path.join(graphs_dir, f'{safe_time_point}.png')
             plt.savefig(graph_path)
             plt.close()
