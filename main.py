@@ -5,6 +5,8 @@ from config import *
 from app.processors.data_processor import DataProcessor
 from app.processors.rinex_processor import RinexProcessor
 
+from debug_code.plot_graphs import *
+
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -14,6 +16,7 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Point, Polygon, MultiPolygon
 from shapely.validation import explain_validity
 
+# TODO 4 панельки 
 
 def get_valid_polygon(coords, timestamp, label):
     """Создает валидный полигон, исправляя ошибки, если необходимо."""
@@ -61,95 +64,23 @@ def check_satellite_crossing(borders, satellites):
                 crossings.setdefault(sat, []).append(t2)
     
     return crossings
-            
-def plot_polygon(boundary_clusters):
-    for timestamp, entry in boundary_clusters.items():
-        if not entry or entry.get('relation') == "left-right":
-            continue
-        
-        cluster1 = np.array(entry["border1"])
-        cluster2 = np.array(entry["border2"])
-        
-        
-        if entry['relation'] == "top-bottom":
-            polygon1 = Polygon(cluster1)
-            polygon2 = Polygon(cluster2)
-            
-            if not polygon1.is_valid:
-                explain = explain_validity(polygon1)
-                if explain != "Valid Geometry":
-                    logger.warning(f"Invalid polygon1 at {timestamp}:\n{explain}")
-                    polygon1 = polygon1.buffer(0)
-                
-            if not polygon2.is_valid:
-                explain = explain_validity(polygon2)
-                if explain != "Valid Geometry":
-                    logger.warning(f"Invalid polygon2 at {timestamp}:\n{explain}")
-                    polygon2 = polygon2.buffer(0)
-            
-            intersection = polygon1.intersection(polygon2)
-            fig, ax = plt.subplots()
-            
-            if isinstance(polygon1, Polygon):
-                x1, y1 = polygon1.exterior.xy
-                ax.plot(x1, y1, 'b--', label="Polygon 1")
-            elif isinstance(polygon1, MultiPolygon):
-                for i, poly in enumerate(polygon1.geoms):
-                    x1, y1 = poly.exterior.xy
-                    ax.plot(x1, y1, 'b--', label=f"Polygon 1 - Part {i+1}")
-
-            if isinstance(polygon2, Polygon):
-                x2, y2 = polygon2.exterior.xy
-                ax.plot(x2, y2, 'r--', label="Polygon 2")
-            elif isinstance(polygon2, MultiPolygon):
-                for i, poly in enumerate(polygon2.geoms):
-                    x2, y2 = poly.exterior.xy
-                    ax.plot(x2, y2, 'r--', label=f"Polygon 2 - Part {i+1}")
-
-            try:
-                if not intersection.is_empty:
-                    if isinstance(intersection, Polygon):  # Один полигон
-                        x_int, y_int = intersection.exterior.xy
-                        ax.fill(x_int, y_int, 'purple', alpha=0.5, label="Intersection")
-                    elif isinstance(intersection, MultiPolygon):  # Несколько полигонов
-                        for poly in intersection.geoms:
-                            x_int, y_int = poly.exterior.xy
-                            ax.fill(x_int, y_int, 'purple', alpha=0.5)
-            except Exception as e:
-                logger.error(f"Error while bilding polygon: {traceback.format_exc(e)}")
-        
-        # Если relation "left-right", строим два отдельных полигона
-        elif entry['relation'] == "left-right":
-            # Полигон для первого кластера: его точки + точки соединения
-            cluster1_polygon = np.vstack([cluster1])
-            cluster2_polygon = np.vstack([cluster2])
-            
-            ax.fill(cluster1_polygon[:, 0], cluster1_polygon[:, 1], 'b', alpha=0.3, label='Cluster 1 Polygon')
-            ax.fill(cluster2_polygon[:, 0], cluster2_polygon[:, 1], 'r', alpha=0.3, label='Cluster 2 Polygon')
-
-        ax.set_title(f"{timestamp} ({entry['relation']})")
-        ax.set_xlabel("Longitude")
-        ax.set_ylabel("Latitude")
-        ax.legend()
-        plt.show()
-
 
 if __name__ == "__main__":
     np.set_printoptions(threshold=np.inf)
     
-    # data_processor = DataProcessor(
-    #     lon_condition=LON_CONDITION,
-    #     lat_condition=LAT_CONDITION,
-    #     segment_lon_step=SEGMENT_LON_STEP,
-    #     segment_lat_step=SEGMENT_LAT_STEP,
-    #     boundary_condition=BOUNDARY_CONDITION,
-    #     save_to_file=False
-    # )
+    data_processor = DataProcessor(
+        lon_condition=LON_CONDITION,
+        lat_condition=LAT_CONDITION,
+        segment_lon_step=SEGMENT_LON_STEP,
+        segment_lat_step=SEGMENT_LAT_STEP,
+        boundary_condition=BOUNDARY_CONDITION,
+        save_to_file=True
+    )
     
-    # file_path = os.path.join("files", "meshing", 'roti_2019_134_-90_90_N_-180_180_E_ec78.h5')
-    # boundary = data_processor.process(
-    #     file_path=file_path,
-    # )
+    file_path = os.path.join("files", "meshing", 'roti_2019_134_-90_90_N_-180_180_E_ec78.h5')
+    boundary = data_processor.process(
+        file_path=file_path,
+    )
     
     # with open('boundary_clusters.json', "w") as file:
     #     json.dump(boundary, file, indent=4)
@@ -172,26 +103,25 @@ if __name__ == "__main__":
             
     #         boundary = data_processor.process(file_path=file_path)
     
-    """
-    """
-    with open('boundary_clusters.json', "r") as file:
-        boundary = json.load(file)    
-        
-    with open('roti_data.json', "r") as file:
-        satellite_data = json.load(file)
+    # with open('boundary_clusters.json', "r") as file:
+    #     boundary = json.load(file)
     
-    crossings = check_satellite_crossing(boundary, satellite_data)
+        
+    # with open('roti_data.json', "r") as file:
+    #     satellite_data = json.load(file)
+    
+    # crossings = check_satellite_crossing(boundary, satellite_data)
        
-    with open('crossings.json', "w") as file:
-        json.dump(crossings, file, indent=4)
+    # with open('crossings.json', "w") as file:
+    #     json.dump(crossings, file, indent=4)
     
-    # with open('crossings.json', "r") as file:
-    #     crossings = json.load(file)
+    # # with open('crossings.json', "r") as file:
+    # #     crossings = json.load(file)
         
-    with open('count_crossing.txt', "w") as file:  
-        for key in crossings.keys():
-            crossing_time_points = crossings[key]
-            crossings_count = len(crossing_time_points)
+    # with open('count_crossing.txt', "w") as file:  
+    #     for key in crossings.keys():
+    #         crossing_time_points = crossings[key]
+    #         crossings_count = len(crossing_time_points)
             
-            if 0 <= crossings_count <= 2:
-                file.write(f"{key} crossings border {crossings_count}\n")
+    #         if 0 <= crossings_count <= 2:
+    #             file.write(f"{key} crossings border {crossings_count}\n")

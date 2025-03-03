@@ -10,6 +10,9 @@ from collections import Counter
 from scipy.interpolate import griddata
 
 from config import *
+from debug_code.plot_graphs import *
+
+# TODO убедиться в точности последовательности точек
 
 class DataProcessor:
     def __init__(
@@ -38,11 +41,8 @@ class DataProcessor:
         self.save_to_file  = save_to_file 
         
         self.file_name = None
-        self.boundary_coords = None
-        
-        if self.save_to_file:
-            import matplotlib
-            matplotlib.use('Agg')
+        self.boundary_points = {}
+        self.sliding_window_maps = {}
             
     def __filter_points(self, points_group):
         lon = points_group['lon'][()]
@@ -265,131 +265,34 @@ class DataProcessor:
                 )
                 
                 boundary_data = self.__get_boundary_data(sliding_windows)
-                # self.plot_combined_results(
+                
+                self.sliding_window_maps[time_point] = sliding_windows
+                self.boundary_points[time_point] = boundary_data
+                
+                # plot_combined_results(
                 #     sliding_windows=sliding_windows,
                 #     time_point=time_point,
                 #     boundary_data=boundary_data,
-                #     roti_data=roti_data
-                #     roti_data={time_point: filtered_points}
-                # )
-                
-                # self.plot_roti(
-                #     map_points=filtered_points,
-                #     time_point=time_point,
-                #     roti_data=roti_data
+                #     roti_data=roti_data,
+                #     roti_data={time_point: filtered_points},
+                #     save_to_file=self.save_to_file,
+                #     filename=self.file_name,
+                #     boundary_condition=BOUNDARY_CONDITION
                 # )
                 
                 result[time_point] = self.__create_boundary_clusters(
                     lat_list=boundary_data['lat'],
                     lon_list=boundary_data['lon']
                 )
-                    
-        
-        return result
-            
-    
-    def plot_combined_results(self, sliding_windows, boundary_data, time_point, roti_data):
-        """
-        Plots two graphs: on the left, a scatter plot of sliding windows with boundaries, and on the right, a ROTI map for each timestamp.
-        
-        :param sliding_windows: A list of processed data segments from the sliding window.
-        :param boundary_data_dict: A dictionary with time_point keys and values containing boundary data ('lon', 'lat').
-        :param roti_data: A dictionary with ROTI data, where the key is a timestamp, and the value is a list of points {'lat', 'lon', 'roti'}.
-        """
-        
-        logger.debug("ploting results")
-        lon = np.array([entry['lon'] for entry in sliding_windows])
-        lat = np.array([entry['lat'] for entry in sliding_windows])
-        vals = np.array([entry['vals'] for entry in sliding_windows])
-
-        safe_time_point = time_point.replace(":", "_")
-        
-        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-
-        cmap = plt.get_cmap("coolwarm")
-        norm = plt.Normalize(0, 0.1)
-        scatter = axes[0].scatter(lon, lat, c=vals, cmap=cmap, norm=norm, edgecolors=None)
-        axes[0].set_xlabel("Longitude")
-        axes[0].set_ylabel("Latitude")
-        axes[0].set_title(f"{safe_time_point}")
-        fig.colorbar(scatter, ax=axes[0], label='ROTI')
-
-        roti_points = roti_data[time_point]
-        lons = roti_points['lon'][()]
-        lats = roti_points['lat'][()]
-        rotis = roti_points['vals'][()]
-        # lats = [point['lat'] for point in roti_points]
-        # lons = [point['lon'] for point in roti_points]
-        # rotis = [point['vals'] for point in roti_points]
-            
-        axes[1].scatter(lons, lats, c=rotis, cmap=cmap, norm=norm, marker='o', edgecolors='black')
-        axes[1].set_xlabel('Longitude')
-        axes[1].set_ylabel('Latitude')
-        axes[1].set_title(f'ROTI Map at {time_point}')
-        axes[1].grid(True)
-        fig.colorbar(scatter, ax=axes[1], label='ROTI')
-        
-        if boundary_data['lon'] and boundary_data['lat']:
-            axes[0].scatter(boundary_data['lon'], boundary_data['lat'], color='black', label=f'{self.boundary_condition} boundary')
-            axes[1].scatter(boundary_data['lon'], boundary_data['lat'], color='black', label=f'{self.boundary_condition} boundary')
-        axes[0].legend()
-        axes[1].legend()
-
-        if self.save_to_file:
-            file_name_base = os.path.splitext(self.file_name)[0]
-            graphs_dir = os.path.join('graphs', file_name_base)
-            os.makedirs(graphs_dir, exist_ok=True)
-            graph_path = os.path.join(graphs_dir, f'{safe_time_point}.png')
-            plt.savefig(graph_path)
-            plt.close()
-        else:
-            plt.show()
-            
-    def plot_roti(self, map_points, time_point, roti_data):
-        """
-        Plots two graphs: on the left, a scatter plot of sliding windows with boundaries, and on the right, a ROTI map for each timestamp.
-        
-        :param sliding_windows: A list of processed data segments from the sliding window.
-        :param boundary_data_dict: A dictionary with time_point keys and values containing boundary data ('lon', 'lat').
-        :param roti_data: A dictionary with ROTI data, where the key is a timestamp, and the value is a list of points {'lat', 'lon', 'roti'}.
-        """
-        
-        logger.debug("ploting results")
-        map_lons = map_points['lon'][()]
-        map_lats = map_points['lat'][()]
-        map_vals = map_points['vals'][()]
-        
-        fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-
-        cmap = plt.get_cmap("coolwarm")
-        norm = plt.Normalize(0, 0.1)
-        scatter1 = axes[0].scatter(map_lons, map_lats, c=map_vals, cmap=cmap, norm=norm, marker='o', edgecolors='black')
-        axes[0].set_xlabel('Longitude')
-        axes[0].set_ylabel('Latitude')
-        axes[0].set_title(f'Map points at {time_point}')
-        axes[0].grid(True)
-        fig.colorbar(scatter1, ax=axes[0], label='ROTI')
-
-        roti_points = roti_data[time_point]
-        lats = [point['lat'] for point in roti_points]
-        lons = [point['lon'] for point in roti_points]
-        rotis = [point['roti'] for point in roti_points]
-            
-        norm = plt.Normalize(0, 0.35)
-        scatter2 = axes[1].scatter(lons, lats, c=rotis, cmap=cmap, norm=norm, marker='o', edgecolors='black')
-        axes[1].set_xlabel('Longitude')
-        axes[1].set_ylabel('Latitude')
-        axes[1].set_title(f'ROTI at {time_point}')
-        axes[1].grid(True)
-        fig.colorbar(scatter2, ax=axes[1], label='ROTI')
-
-        if self.save_to_file:
-            graphs_dir = os.path.join('graphs', 'map_vs_roti')
-            os.makedirs(graphs_dir, exist_ok=True)
-            safe_time_point = time_point.replace(":", "_")
-            graph_path = os.path.join(graphs_dir, f'{safe_time_point}.png')
-            plt.savefig(graph_path)
-            plt.close()
-        else:
-            plt.show()
                 
+                plot_combined_graphs(
+                    map_points=filtered_points,
+                    sliding_windows=sliding_windows,
+                    boundary_data=boundary_data,
+                    boundary_condition=BOUNDARY_CONDITION,
+                    time_point=time_point,
+                    boundary_clusters=result,
+                    save_to_file=self.save_to_file
+                )
+                    
+        return result
