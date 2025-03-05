@@ -27,8 +27,8 @@ class RinexProcessor:
     def __save_station_coords(self, station_name):
         station = self.file[station_name]
         lat, lon = station.attrs['lat'], station.attrs['lon']
-        # if lat >= 0 and -2.53073 <= lon <= -0.523599:
-        self.stations_coords[station_name] = {'lat': lat, 'lon': lon}
+        if lat >= 0 and -2.53073 <= lon <= -0.523599:
+            self.stations_coords[station_name] = {'lat': lat, 'lon': lon}
             
     def __process_satellite(self, station_name, satellite_name):
         logger.info(f"Processing {station_name}_-_{satellite_name}")
