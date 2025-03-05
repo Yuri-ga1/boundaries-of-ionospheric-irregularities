@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import matplotlib.dates as mdates
+import matplotlib.ticker as ticker
 import numpy as np
 
 import os
@@ -11,7 +12,7 @@ from shapely.geometry import Polygon, MultiPolygon
 from config import logger
 
 
-def plot_polygon(boundary_clusters, time_point, user_ax=None):
+def plot_polygon(boundary_clusters, time_point, ax=None):
     """
     Plots boundary polygons based on the provided clusters.
 
@@ -20,8 +21,10 @@ def plot_polygon(boundary_clusters, time_point, user_ax=None):
     :param ax: matplotlib axis, optional.
     :return: fig, ax objects.
     """
-    if user_ax is None:
+    created_fig = False
+    if ax is None:
         fig, ax = plt.subplots()
+        created_fig = True
     else:
         fig = ax.figure
     
@@ -33,7 +36,7 @@ def plot_polygon(boundary_clusters, time_point, user_ax=None):
             ha='center', va='center', rotation=45, 
             transform=ax.transAxes
         )
-        if user_ax is None:
+        if ax is None:
             plt.close()
             return
         else:
@@ -71,13 +74,13 @@ def plot_polygon(boundary_clusters, time_point, user_ax=None):
     ax.set_ylabel("Latitude")
     ax.legend()
     
-    if user_ax is None:
+    if created_fig:
         plt.show()
     else:
         return fig, ax
 
 
-def plot_roti_map(roti_points, time_point, user_ax=None, cmap='coolwarm'):
+def plot_roti_map(roti_points, time_point, ax=None, cmap='coolwarm'):
     """
     Plots a ROTI map based on provided points.
 
@@ -87,8 +90,10 @@ def plot_roti_map(roti_points, time_point, user_ax=None, cmap='coolwarm'):
     :param cmap: str, colormap for visualization.
     :return: fig, ax objects.
     """
-    if user_ax is None:
+    created_fig = False
+    if ax is None:
         fig, ax = plt.subplots()
+        created_fig = True
     else:
         fig = ax.figure
     
@@ -107,7 +112,7 @@ def plot_roti_map(roti_points, time_point, user_ax=None, cmap='coolwarm'):
     ax.grid(True)
     fig.colorbar(scatter, ax=ax, label='ROTI')
     
-    if user_ax is None:
+    if created_fig:
         plt.show()
     else:
         return fig, ax
@@ -117,7 +122,7 @@ def plot_sliding_window(
         sliding_windows,
         boundary_data,
         boundary_condition,
-        user_ax=None,
+        ax=None,
         time_point = None,
         cmap='coolwarm'
     ):
@@ -132,8 +137,10 @@ def plot_sliding_window(
     :param cmap: str, colormap.
     :return: fig, ax objects.
     """
-    if user_ax is None:
+    created_fig = False
+    if ax is None:
         fig, ax = plt.subplots()
+        created_fig = True
     else:
         fig = ax.figure
     
@@ -161,13 +168,13 @@ def plot_sliding_window(
         )
         ax.legend()
 
-    if user_ax is None:
+    if created_fig:
         plt.show()
     else:
         return fig, ax
 
 
-def plot_roti_dynamics(station_data, satellite, time_range=None, user_ax=None):
+def plot_roti_dynamics(station_data, satellite, time_range=None, ax=None):
     """
     Plots ROTI dynamics for a station-satellite pair.
 
@@ -177,26 +184,35 @@ def plot_roti_dynamics(station_data, satellite, time_range=None, user_ax=None):
     :param ax: matplotlib axis, optional.
     :return: fig, ax objects.
     """
-    if user_ax is None:
+    created_fig = False
+    if ax is None:
         fig, ax = plt.subplots()
+        created_fig = True
     else:
         fig = ax.figure
-    
+
     roti = station_data[satellite]['roti'][:]
     ts = station_data[satellite]['timestamp'][:]
     times = [dt.fromtimestamp(float(t), datetime.UTC) for t in ts]
-    
+
     ax.scatter(times, roti)
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+
+    day_start = dt.combine(times[0].date(), dt.min.time())
+    day_end = dt.combine(times[0].date(), dt.max.time())
+    ax.set_xlim(day_start, day_end)
+
+    ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+    ax.tick_params(axis='x', rotation=45)
+
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.3f'))
+
     ax.set_title(f"ROTI Dynamics for {satellite}")
     ax.set_xlabel("Time")
     ax.set_ylabel("ROTI")
     ax.grid(True)
-    
-    if time_range:
-        ax.set_xlim(time_range)
-        
-    if user_ax is None:
+
+    if created_fig:
         plt.show()
     else:
         return fig, ax
@@ -254,24 +270,28 @@ def plot_combined_graphs(
     # 4. ROTI dynamics
     with h5.File(roti_file, 'r') as h5file:
         if stations is None:
-            stations = h5file.keys()  # Пример станции
-        
+            stations = h5file.keys()
+
         for station in stations:
             for satellite in h5file[station]:
+                dynamic_ax.clear()
+
+                plot_roti_dynamics(h5file[station], satellite, ax=dynamic_ax)
+
                 fig.suptitle(f'Graphs for {station}_{satellite} at {time_point}')
-                plot_roti_dynamics(
-                    station_data=h5file[station],
-                    satellite=satellite,
-                    ax=dynamic_ax
-                )
-    
+
                 fig.tight_layout()
-                
+
                 if save_to_file:
-                    output_dir = os.path.join('results', 'combined_plots')
+                    output_dir = os.path.join('results', 'combined_plots', station, satellite)
                     os.makedirs(output_dir, exist_ok=True)
                     filename = f"{time_point.replace(':', '_')}.png"
                     plt.savefig(os.path.join(output_dir, filename))
-                    plt.close()
                 else:
-                    plt.show()
+                    fig.canvas.draw()
+                    plt.pause(0.5)
+
+    if not save_to_file:
+        plt.show()
+    else:
+        plt.close(fig)
