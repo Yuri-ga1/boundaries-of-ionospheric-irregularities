@@ -41,8 +41,6 @@ class DataProcessor:
         self.save_to_file  = save_to_file 
         
         self.file_name = None
-        self.boundary_points = {}
-        self.sliding_window_maps = {}
             
     def __filter_points(self, points_group):
         lon = points_group['lon'][()]
@@ -131,23 +129,27 @@ class DataProcessor:
         return boundary_data
     
     
-    def __delete_circle(self, data):
+    def __delete_circle(self, data, condition):
         first_col_abs = np.abs(data[:, 0])
         
         increasing = first_col_abs[1] > first_col_abs[0]
         
         if increasing:
             max_index = np.argmax(first_col_abs)
-            mask = (np.arange(len(data)) <= max_index) | np.any(data == 0, axis=1)
+            mask = (np.arange(len(data)) <= max_index) | np.any(data == condition, axis=1)
         else:
             min_index = np.argmin(first_col_abs)
-            mask = (np.arange(len(data)) <= min_index) | np.any(data == 90, axis=1)
+            mask = (np.arange(len(data)) <= min_index) | np.any(data == condition, axis=1)
         
         return data[mask]
 
     def __create_boundary_clusters(self, lat_list, lon_list, min_cluster_size=MIN_CLUSTER_SIZE):
         dbscan = DBSCAN(eps=0.7, min_samples=3)
         filtered_boundary_data = {}
+        
+        top_edge_con = LAT_CONDITION
+        bottom_edge_con = 90
+        
             
         if lat_list and lon_list:
             column_coords = np.column_stack((lon_list, lat_list))
@@ -196,16 +198,16 @@ class DataProcessor:
                         right_edge_top_cluster[0] = right_edge_bottom_cluster[0]
                         top_cluster = np.insert(top_cluster, 0, right_edge_top_cluster, axis=0)
                     
-                    left_edge_top_cluster[1], right_edge_top_cluster[1] = 0, 0
-                    left_edge_bottom_cluster[1], right_edge_bottom_cluster[1] = 90, 90
+                    left_edge_top_cluster[1], right_edge_top_cluster[1] = top_edge_con, top_edge_con
+                    left_edge_bottom_cluster[1], right_edge_bottom_cluster[1] = bottom_edge_con, bottom_edge_con
                     
                     top_cluster = np.insert(top_cluster, len(top_cluster), left_edge_top_cluster, axis=0)
                     top_cluster = np.insert(top_cluster, len(top_cluster), right_edge_top_cluster, axis=0)
                     bottom_cluster = np.insert(bottom_cluster, 0, left_edge_bottom_cluster, axis=0)
                     bottom_cluster = np.insert(bottom_cluster, len(bottom_cluster), right_edge_bottom_cluster, axis=0)
                     
-                    cluster1 = self.__delete_circle(top_cluster).tolist()
-                    cluster2 = self.__delete_circle(bottom_cluster).tolist()
+                    cluster1 = self.__delete_circle(top_cluster, top_edge_con).tolist()
+                    cluster2 = self.__delete_circle(bottom_cluster, bottom_edge_con).tolist()
                     
                     if len(cluster1) < 100 or len(cluster2) < 100:
                         return None
@@ -237,7 +239,7 @@ class DataProcessor:
         
         return filtered_boundary_data
 
-    def process(self, file_path: str, roti_data = None, time_points = None):
+    def process(self, file_path: str, stations = None, roti_file = None, time_points = None):
         """
         Main function to process the file.
         
@@ -266,20 +268,6 @@ class DataProcessor:
                 
                 boundary_data = self.__get_boundary_data(sliding_windows)
                 
-                self.sliding_window_maps[time_point] = sliding_windows
-                self.boundary_points[time_point] = boundary_data
-                
-                # plot_combined_results(
-                #     sliding_windows=sliding_windows,
-                #     time_point=time_point,
-                #     boundary_data=boundary_data,
-                #     roti_data=roti_data,
-                #     roti_data={time_point: filtered_points},
-                #     save_to_file=self.save_to_file,
-                #     filename=self.file_name,
-                #     boundary_condition=BOUNDARY_CONDITION
-                # )
-                
                 result[time_point] = self.__create_boundary_clusters(
                     lat_list=boundary_data['lat'],
                     lon_list=boundary_data['lon']
@@ -292,6 +280,8 @@ class DataProcessor:
                     boundary_condition=BOUNDARY_CONDITION,
                     time_point=time_point,
                     boundary_clusters=result,
+                    roti_file=roti_file,
+                    stations=stations,
                     save_to_file=self.save_to_file
                 )
                     
