@@ -9,8 +9,15 @@ import h5py as h5
 from datetime import datetime as dt
 import datetime
 from shapely.geometry import Polygon, MultiPolygon
-from config import logger
 
+from debug_code.calc_sat_trajectory import Trajectory
+
+def remove_traj_lines(trajectory_elements):
+    if trajectory_elements:
+        for line, scatter in trajectory_elements:
+            line.remove()
+            scatter.remove()
+        trajectory_elements.clear()
 
 def plot_polygon(boundary_clusters, time_point, ax=None):
     """
@@ -216,6 +223,30 @@ def plot_roti_dynamics(station_data, satellite, time_range=None, ax=None):
         plt.show()
     else:
         return fig, ax
+    
+def add_sat_traj(station_lat, station_lon, sat_azs, sat_els, sat_times, ax_list=None):
+    trajectory = Trajectory(
+        lat_site=station_lat,
+        lon_site=station_lon,
+    )
+
+    trajectory.procces(
+        azs=sat_azs,
+        els=sat_els,
+        times=sat_times
+    )
+
+    trajectory_elements = []
+    if trajectory.traj_lat.size > 0 and trajectory.traj_lon.size > 0:
+        color='green'
+        for ax in ax_list:
+            line, = ax.plot(trajectory.traj_lon, trajectory.traj_lat, color=color, label="Trajectory", linewidth=2)
+            scatter = ax.scatter(trajectory.traj_lon[-1], trajectory.traj_lat[-1], color=color, marker='s', s=20, label="End")
+
+            ax.legend()
+            trajectory_elements.append((line, scatter))
+
+    return trajectory_elements
 
 
 def plot_combined_graphs(
@@ -277,9 +308,16 @@ def plot_combined_graphs(
                 dynamic_ax.clear()
 
                 plot_roti_dynamics(h5file[station], satellite, ax=dynamic_ax)
+                trajectory_elements = add_sat_traj(
+                    station_lat=h5file[station].attrs['lat'],
+                    station_lon=h5file[station].attrs['lon'],
+                    sat_azs=h5file[station][satellite]['azimuth'][:],
+                    sat_els=h5file[station][satellite]['elevation'][:],
+                    sat_times=h5file[station][satellite]['timestamp'][:],
+                    ax_list=[sl_win_ax, poly_ax]
+                )
 
                 fig.suptitle(f'Graphs for {station}_{satellite} at {time_point}')
-
                 fig.tight_layout()
 
                 if save_to_file:
@@ -287,9 +325,12 @@ def plot_combined_graphs(
                     os.makedirs(output_dir, exist_ok=True)
                     filename = f"{time_point.replace(':', '_')}.png"
                     plt.savefig(os.path.join(output_dir, filename))
+                    remove_traj_lines(trajectory_elements)
                 else:
                     fig.canvas.draw()
-                    plt.pause(0.5)
+                    plt.pause(20)
+                    remove_traj_lines(trajectory_elements)
+                    
 
     if not save_to_file:
         plt.show()
