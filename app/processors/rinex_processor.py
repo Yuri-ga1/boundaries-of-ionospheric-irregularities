@@ -6,6 +6,8 @@ from datetime import datetime as dt
 import datetime
 from collections import OrderedDict
 
+from app.az_el_to_lot_lon import az_el_to_lat_lon
+
 class RinexProcessor:
     def __init__(self, file_path):
         self.file_path = file_path
@@ -48,7 +50,7 @@ class RinexProcessor:
         
         all_lat, all_lon = [], []
         for az, el in zip(azs, els):
-            lat, lon = self.__az_el_to_lat_lon(
+            lat, lon = az_el_to_lat_lon(
                 s_lat=st_coords['lat'],
                 s_lon=st_coords['lon'],
                 az=az,
@@ -67,26 +69,6 @@ class RinexProcessor:
             'lon': all_lon[mask],
             'timestamp': ts[mask]
         }
-    
-    @staticmethod 
-    def __az_el_to_lat_lon(s_lat, s_lon, az, el,  hm=HM, R=RE_KM):
-        """
-        Calculates subionospheric point and deltas from site
-        Parameters:
-            s_lat, slon - site latitude and longitude in radians
-            hm - ionposheric maximum height (km)
-            az, el - azimuth and elevation of the site-sattelite line of sight in
-                radians
-            R - Earth radius (km)
-        """
-        #TODO use meters
-        psi = np.pi / 2 - el - np.arcsin(np.cos(el) * R / (R + hm))
-        lat = bi = np.arcsin(np.sin(s_lat) * np.cos(psi) + np.cos(s_lat) * np.sin(psi) * np.cos(az))
-        lon = s_lon + np.arcsin(np.sin(psi) * np.sin(az) / np.cos(bi))
-
-        lon = lon - 2 * np.pi if lon > np.pi else lon
-        lon = lon + 2 * np.pi if lon < -np.pi else lon
-        return lat, lon
 
     def sort_dict(self, d):
         """
