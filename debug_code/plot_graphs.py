@@ -98,7 +98,7 @@ def plot_roti_map(roti_points, time_point, ax=None, cmap='coolwarm'):
         fig = ax.figure
     
     cmap = plt.get_cmap(cmap)
-    norm = plt.Normalize(0, 0.35)
+    norm = plt.Normalize(0, 0.1)
     
     lons = roti_points['lon'][()]
     lats = roti_points['lat'][()]
@@ -283,7 +283,7 @@ def plot_combined_graphs(
                 fig.tight_layout()
 
                 if save_to_file:
-                    output_dir = os.path.join('results', 'combined_plots', station, satellite)
+                    output_dir = os.path.join('graphs', 'combined', station, satellite)
                     os.makedirs(output_dir, exist_ok=True)
                     filename = f"{time_point.replace(':', '_')}.png"
                     plt.savefig(os.path.join(output_dir, filename))
