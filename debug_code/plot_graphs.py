@@ -19,6 +19,19 @@ def remove_traj_lines(trajectory_elements):
             scatter.remove()
         trajectory_elements.clear()
 
+def plot_clusters(cluster_dict, time_point):
+    fig, ax = plt.subplots()
+    
+    for label, cluster in cluster_dict.items():
+        cluster = np.array(cluster)
+        ax.scatter(cluster[:, 0], cluster[:, 1], label=label)
+    
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.set_title(f"Clusters at {time_point}")
+    ax.legend()
+    plt.show()
+
 def plot_polygon(boundary_clusters, time_point, ax=None):
     """
     Plots boundary polygons based on the provided clusters.
@@ -49,15 +62,13 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
         else:
             return fig, ax
     
-    cluster1 = np.array(entry["border1"])
-    cluster2 = np.array(entry["border2"])
+    clusters = [np.array(entry[f"border{i+1}"]) for i in range(len(entry) - 1)]
     
     if entry['relation'] == "top-bottom":
-        polygon1 = Polygon(cluster1).buffer(0)
-        polygon2 = Polygon(cluster2).buffer(0)
+        polygon1 = Polygon(clusters[0]).buffer(0)
+        polygon2 = Polygon(clusters[1]).buffer(0)
         intersection = polygon1.intersection(polygon2)
 
-        # Drawing polygons
         for poly, color, label in [(polygon1, 'b', "Polygon 1"), 
                                  (polygon2, 'r', "Polygon 2")]:
             if isinstance(poly, Polygon):
@@ -66,20 +77,56 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
             elif isinstance(poly, MultiPolygon):
                 for i, part in enumerate(poly.geoms):
                     x, y = part.exterior.xy
-                    ax.plot(x, y, f'{color}--', label=f"{label} - Part {i+1}")
-
-        # Drawing the intersection
+                    ax.plot(x, y, f'{color}--', label=f"{label}")
+                    
         if not intersection.is_empty:
             if isinstance(intersection, (Polygon, MultiPolygon)):
                 for poly in ([intersection] if isinstance(intersection, Polygon) 
                            else intersection.geoms):
                     x, y = poly.exterior.xy
                     ax.fill(x, y, 'purple', alpha=0.5, label="Intersection")
+        
+        for i in range(2, len(clusters)):
+            cluster = Polygon(clusters[i]).buffer(0)
+            
+            if isinstance(cluster, Polygon):
+                x, y = cluster.exterior.xy
+                if intersection.contains(cluster):
+                    intersection_without_cluster = intersection.intersection(cluster)
+                    if not intersection_without_cluster.is_empty:
+                        x, y = intersection_without_cluster.exterior.xy
+                        ax.fill(x, y, 'white')
+                        ax.plot(x, y, 'g--')
+                else:
+                    ax.fill(x, y, 'purple', alpha=0.5)
+                    ax.plot(x, y, 'y--', label=f'Polygon {i+1}')
+            elif isinstance(cluster, MultiPolygon):
+                for j, part in enumerate(cluster.geoms):
+                    x, y = part.exterior.xy
+                    if intersection.contains(part):
+                        part_without_intersection = intersection.difference(part)
+                        if not part_without_intersection.is_empty:
+                            x, y = part_without_intersection.exterior.xy
+                            ax.fill(x, y, 'white', alpha=0.5)
+                            ax.plot(x, y, 'g--')
+                    else:
+                        ax.fill(x, y, 'purple', alpha=0.5)
+                        ax.plot(x, y, 'y--', label=f'Polygon {i+1}')
+                        
 
     ax.set_title(f"Polygon at {time_point}")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
-    ax.legend()
+    
+    handles, labels = ax.get_legend_handles_labels()
+    unique_labels = []
+    unique_handles = []
+    for handle, label in zip(handles, labels):
+        if label not in unique_labels:
+            unique_labels.append(label)
+            unique_handles.append(handle)
+    
+    ax.legend(unique_handles, unique_labels)
     
     if created_fig:
         plt.show()
