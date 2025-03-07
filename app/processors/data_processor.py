@@ -143,101 +143,84 @@ class DataProcessor:
         
         return data[mask]
 
-    def __create_boundary_clusters(self, lat_list, lon_list, min_cluster_size=MIN_CLUSTER_SIZE):
+    def __create_boundary_clusters(self, lat_list, lon_list, time_point, min_cluster_size=MIN_CLUSTER_SIZE):
         dbscan = DBSCAN(eps=0.7, min_samples=3)
-        filtered_boundary_data = {}
         
         top_edge_con = LAT_CONDITION
         bottom_edge_con = 90
         
-            
         if lat_list and lon_list:
             column_coords = np.column_stack((lon_list, lat_list))
             labels = dbscan.fit_predict(column_coords)
             
             label_counts = Counter(labels)
-            del label_counts[-1]  # Убираем шум (-1)
+            del label_counts[-1]
             
-            if len(label_counts) >= 2:
-                top_clusters = [label for label, _ in label_counts.most_common(2)]
+            valid_clusters = {label: count for label, count in label_counts.items() if count >= min_cluster_size}
+            
+            if len(valid_clusters) < 2:
+                return None
+            
+            sorted_clusters = sorted(valid_clusters, key=valid_clusters.get, reverse=True)
+            
+            cluster_dict = {}
+            for idx, label in enumerate(sorted_clusters):
+                cluster = column_coords[labels == label]
+                cluster_dict[f"border{idx+1}"] = cluster.tolist()
+            
+            top_clusters = sorted_clusters[:2]
+            
+            cluster1 = np.array(cluster_dict[f"border{sorted_clusters.index(top_clusters[0]) + 1}"])
+            cluster2 = np.array(cluster_dict[f"border{sorted_clusters.index(top_clusters[1]) + 1}"])
+            
+            cluster1_center = np.mean(cluster1, axis=0)
+            cluster2_center = np.mean(cluster2, axis=0)
+            
+            if abs(cluster1_center[0] - cluster2_center[0]) > abs(cluster1_center[1] - cluster2_center[1]):
+                relation = "left-right"
             else:
-                top_clusters = list(label_counts.keys())
+                relation = "top-bottom"
             
-            valid_clusters = [label for label in top_clusters if label_counts[label] >= min_cluster_size]
-            
-            if len(valid_clusters) == 2:
-                cluster1 = column_coords[labels == valid_clusters[0]]
-                cluster2 = column_coords[labels == valid_clusters[1]]
-                
-                cluster1_center = np.mean(cluster1, axis=0)
-                cluster2_center = np.mean(cluster2, axis=0)
-                
-                if abs(cluster1_center[0] - cluster2_center[0]) > abs(cluster1_center[1] - cluster2_center[1]):
-                    relation = "left-right"
+            if relation == "top-bottom":
+                if cluster1_center[1] > cluster2_center[1]:
+                    top_cluster, bottom_cluster = cluster1, cluster2
                 else:
-                    relation = "top-bottom"
+                    top_cluster, bottom_cluster = cluster2, cluster1
                 
-                if relation == "top-bottom":
-                    if cluster1_center[1] > cluster2_center[1]:
-                        top_cluster = cluster1
-                        bottom_cluster = cluster2
-                    else:
-                        top_cluster = cluster2
-                        bottom_cluster = cluster1
-                    
-                    left_edge_top_cluster = deepcopy(min(top_cluster, key=lambda p: (p[0])))
-                    right_edge_top_cluster = deepcopy(max(top_cluster, key=lambda p: (p[0])))
-                    left_edge_bottom_cluster= deepcopy(min(bottom_cluster, key=lambda p: (p[0])))
-                    right_edge_bottom_cluster = deepcopy(max(bottom_cluster, key=lambda p: (p[0])))
-                    
-                    if abs(left_edge_bottom_cluster[0]) > abs(left_edge_top_cluster[0]):
-                        left_edge_top_cluster[0] = left_edge_bottom_cluster[0]
-                        top_cluster = np.insert(top_cluster, len(top_cluster), left_edge_top_cluster, axis=0)
-                        
-                    if abs(right_edge_top_cluster[0]) > abs(right_edge_bottom_cluster[0]):
-                        right_edge_top_cluster[0] = right_edge_bottom_cluster[0]
-                        top_cluster = np.insert(top_cluster, 0, right_edge_top_cluster, axis=0)
-                    
-                    left_edge_top_cluster[1], right_edge_top_cluster[1] = top_edge_con, top_edge_con
-                    left_edge_bottom_cluster[1], right_edge_bottom_cluster[1] = bottom_edge_con, bottom_edge_con
-                    
+                left_edge_top_cluster = deepcopy(min(top_cluster, key=lambda p: p[0]))
+                right_edge_top_cluster = deepcopy(max(top_cluster, key=lambda p: p[0]))
+                left_edge_bottom_cluster = deepcopy(min(bottom_cluster, key=lambda p: p[0]))
+                right_edge_bottom_cluster = deepcopy(max(bottom_cluster, key=lambda p: p[0]))
+                
+                if abs(left_edge_bottom_cluster[0]) > abs(left_edge_top_cluster[0]):
+                    left_edge_top_cluster[0] = left_edge_bottom_cluster[0]
                     top_cluster = np.insert(top_cluster, len(top_cluster), left_edge_top_cluster, axis=0)
-                    top_cluster = np.insert(top_cluster, len(top_cluster), right_edge_top_cluster, axis=0)
-                    bottom_cluster = np.insert(bottom_cluster, 0, left_edge_bottom_cluster, axis=0)
-                    bottom_cluster = np.insert(bottom_cluster, len(bottom_cluster), right_edge_bottom_cluster, axis=0)
-                    
-                    cluster1 = self.__delete_circle(top_cluster, top_edge_con).tolist()
-                    cluster2 = self.__delete_circle(bottom_cluster, bottom_edge_con).tolist()
-                    
-                    if len(cluster1) < 100 or len(cluster2) < 100:
-                        return None
-                    
-                    return {
-                        "relation": relation,
-                        "border1": cluster1,
-                        "border2": cluster2,
-                    }
-
-                else:
-                    if cluster1_center[0] < cluster2_center[0]:
-                        left_cluster = cluster1
-                        right_cluster = cluster2
-                    else:
-                        left_cluster = cluster2
-                        right_cluster = cluster1
-                        
-                    # bottom_left = min(left_cluster, key=lambda p: (p[0], -p[1]))
-                    # top_left = max(left_cluster, key=lambda p: (p[0], -p[1]))
-                    # bottom_right = min(right_cluster, key=lambda p: (-p[0], p[1]))
-                    # top_right = max(right_cluster, key=lambda p: (p[0], p[1]))
                 
-                    return {
-                        "relation": relation,
-                        "border1": cluster1.tolist(),
-                        "border2": cluster2.tolist(),
-                    }
-        
-        return filtered_boundary_data
+                if abs(right_edge_top_cluster[0]) > abs(right_edge_bottom_cluster[0]):
+                    right_edge_top_cluster[0] = right_edge_bottom_cluster[0]
+                    top_cluster = np.insert(top_cluster, 0, right_edge_top_cluster, axis=0)
+                
+                left_edge_top_cluster[1], right_edge_top_cluster[1] = top_edge_con, top_edge_con
+                left_edge_bottom_cluster[1], right_edge_bottom_cluster[1] = bottom_edge_con, bottom_edge_con
+                
+                top_cluster = np.insert(top_cluster, len(top_cluster), left_edge_top_cluster, axis=0)
+                top_cluster = np.insert(top_cluster, len(top_cluster), right_edge_top_cluster, axis=0)
+                bottom_cluster = np.insert(bottom_cluster, 0, left_edge_bottom_cluster, axis=0)
+                bottom_cluster = np.insert(bottom_cluster, len(bottom_cluster), right_edge_bottom_cluster, axis=0)
+                
+                top_cluster = self.__delete_circle(top_cluster, top_edge_con)
+                bottom_cluster = self.__delete_circle(bottom_cluster, bottom_edge_con)
+
+                if len(top_cluster) < 100 or len(bottom_cluster) < 100:
+                    return None
+
+                cluster_dict[f"border{sorted_clusters.index(top_clusters[0]) + 1}"] = top_cluster.tolist()
+                cluster_dict[f"border{sorted_clusters.index(top_clusters[1]) + 1}"] = bottom_cluster.tolist()
+            return {
+                "relation": relation,
+                **cluster_dict
+            }
+
 
     def process(self, file_path: str, stations = None, roti_file = None, time_points = None):
         """
