@@ -4,6 +4,7 @@ from config import *
 
 from app.processors.data_processor import DataProcessor
 from app.processors.rinex_processor import RinexProcessor
+from app.png_to_video_converter import PngToVideoConverter
 
 from debug_code.plot_graphs import *
 
@@ -68,19 +69,29 @@ def check_satellite_crossing(borders, satellites):
 if __name__ == "__main__":
     np.set_printoptions(threshold=np.inf)
     
-    data_processor = DataProcessor(
-        lon_condition=LON_CONDITION,
-        lat_condition=LAT_CONDITION,
-        segment_lon_step=SEGMENT_LON_STEP,
-        segment_lat_step=SEGMENT_LAT_STEP,
-        boundary_condition=BOUNDARY_CONDITION,
-        save_to_file=True
-    )
+    # data_processor = DataProcessor(
+    #     lon_condition=LON_CONDITION,
+    #     lat_condition=LAT_CONDITION,
+    #     segment_lon_step=SEGMENT_LON_STEP,
+    #     segment_lat_step=SEGMENT_LAT_STEP,
+    #     boundary_condition=BOUNDARY_CONDITION,
+    #     save_to_file=True
+    # )
     
-    file_path = os.path.join("files", "meshing", 'roti_2019_134_-90_90_N_-180_180_E_ec78.h5')
-    boundary = data_processor.process(
-        file_path=file_path,
-    )
+    # with open('roti_data.json', "r") as file:
+    #     roti_data = json.load(file)
+    
+    # with open("stations.txt", "r", encoding="utf-8") as file:
+    #     content = file.read()
+    #     stations = content.replace("dict_keys([", "").replace("])", "").replace("'", "").split(", ")
+    
+    # file_path = os.path.join("files", "meshing", 'roti_2019_134_-90_90_N_-180_180_E_ec78.h5')
+    # boundary = data_processor.process(
+    #     file_path=file_path,
+    #     roti_file="files/2019-05-14.h5",
+    #     # stations=stations
+    #     stations=['chur', 'rabc', 'repc', 'kugc', 'will']
+    # )
     
     # with open('boundary_clusters.json', "w") as file:
     #     json.dump(boundary, file, indent=4)
@@ -91,10 +102,13 @@ if __name__ == "__main__":
     #     with open('roti_data.json', "w") as file:
     #         json.dump(processor.data, file, indent=4)
             
+    #     with open('stations.txt', "w") as file:
+    #         file.write(f"{processor.stations_coords.keys()}")
+            
     #     file_path = os.path.join("files", "meshing", 'roti_2019_134_-90_90_N_-180_180_E_ec78.h5')
     #     boundary = data_processor.process(
     #         file_path=file_path,
-    #         roti_data=processor.data
+    #         stations=processor.stations_coords.keys()
     #     )
     
     # for root, dirs, files in os.walk(DIRECTORY_PATH):
@@ -103,9 +117,18 @@ if __name__ == "__main__":
             
     #         boundary = data_processor.process(file_path=file_path)
     
+    """
+    Plot polygon from json file
+    """
     # with open('boundary_clusters.json', "r") as file:
     #     boundary = json.load(file)
-    
+        
+    # for time_point in boundary.keys():
+    #     plot_polygon(
+    #         boundary_clusters=boundary,
+    #         time_point=time_point
+    #     )
+    """"""
         
     # with open('roti_data.json', "r") as file:
     #     satellite_data = json.load(file)
@@ -125,3 +148,6 @@ if __name__ == "__main__":
             
     #         if 0 <= crossings_count <= 2:
     #             file.write(f"{key} crossings border {crossings_count}\n")
+    
+    converter = PngToVideoConverter(input_dir=FRAME_GRAPHS_PATH, output_dir=SAVE_VIDEO_PATH)
+    converter.process_images_to_video()
