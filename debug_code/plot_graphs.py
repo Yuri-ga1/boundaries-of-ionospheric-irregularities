@@ -11,6 +11,7 @@ import datetime
 from shapely.geometry import Polygon, MultiPolygon
 
 from debug_code.calc_sat_trajectory import Trajectory
+from config import FRAME_GRAPHS_PATH
 
 def remove_traj_lines(trajectory_elements):
     if trajectory_elements:
@@ -104,11 +105,12 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
                 for j, part in enumerate(cluster.geoms):
                     x, y = part.exterior.xy
                     if intersection.contains(part):
-                        part_without_intersection = intersection.difference(part)
-                        if not part_without_intersection.is_empty:
-                            x, y = part_without_intersection.exterior.xy
-                            ax.fill(x, y, 'white', alpha=0.5)
-                            ax.plot(x, y, 'g--')
+                        pass
+                        # part_without_intersection = intersection.intersection(part)
+                        # if not part_without_intersection.is_empty:
+                        #     x, y = part_without_intersection.exterior.xy
+                        #     ax.fill(x, y, 'white', alpha=0.5)
+                        #     ax.plot(x, y, 'g--')
                     else:
                         ax.fill(x, y, 'purple', alpha=0.5)
                         ax.plot(x, y, 'y--', label=f'Polygon {i+1}')
@@ -368,7 +370,7 @@ def plot_combined_graphs(
                 fig.tight_layout()
 
                 if save_to_file:
-                    output_dir = os.path.join('graphs', 'combined', station, satellite)
+                    output_dir = os.path.join(FRAME_GRAPHS_PATH, station, satellite)
                     os.makedirs(output_dir, exist_ok=True)
                     filename = f"{time_point.replace(':', '_')}.png"
                     plt.savefig(os.path.join(output_dir, filename))
