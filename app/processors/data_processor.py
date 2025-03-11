@@ -143,7 +143,7 @@ class DataProcessor:
         
         return data[mask]
 
-    def __create_boundary_clusters(self, lat_list, lon_list, time_point, min_cluster_size=MIN_CLUSTER_SIZE):
+    def __create_boundary_clusters(self, lat_list, lon_list, min_cluster_size=MIN_CLUSTER_SIZE):
         dbscan = DBSCAN(eps=0.7, min_samples=3)
         
         top_edge_con = LAT_CONDITION
