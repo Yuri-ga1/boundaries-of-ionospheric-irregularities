@@ -1,17 +1,20 @@
-import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
-import matplotlib.dates as mdates
 import matplotlib.ticker as ticker
-import numpy as np
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 
-import os
-import h5py as h5
 from datetime import datetime as dt
+from datetime import timedelta
 import datetime
+
+import numpy as np
+import h5py as h5
+import os
+
 from shapely.geometry import Polygon, MultiPolygon
 
 from debug_code.calc_sat_trajectory import Trajectory
-from config import FRAME_GRAPHS_PATH
+from config import FRAME_GRAPHS_PATH, LAT_CONDITION, LON_CONDITION
 
 def remove_traj_lines(trajectory_elements):
     if trajectory_elements:
@@ -26,7 +29,9 @@ def plot_clusters(cluster_dict, time_point):
     for label, cluster in cluster_dict.items():
         cluster = np.array(cluster)
         ax.scatter(cluster[:, 0], cluster[:, 1], label=label)
-    
+        
+    ax.set_xlim(-120, -70)
+    ax.set_ylim(40, 90)
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
     ax.set_title(f"Clusters at {time_point}")
@@ -57,6 +62,8 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
             ha='center', va='center', rotation=45, 
             transform=ax.transAxes
         )
+        ax.set_xlim(-120, LON_CONDITION-5)
+        ax.set_ylim(LAT_CONDITION, 90)
         if ax is None:
             plt.close()
             return
@@ -115,7 +122,6 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
                         ax.fill(x, y, 'purple', alpha=0.5)
                         ax.plot(x, y, 'y--', label=f'Polygon {i+1}')
                         
-
     ax.set_title(f"Polygon at {time_point}")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
@@ -161,7 +167,7 @@ def plot_roti_map(roti_points, time_point, ax=None, cmap='coolwarm'):
     rotis = roti_points['vals'][()]
     
     scatter = ax.scatter(lons, lats, c=rotis, cmap=cmap, norm=norm, 
-                        marker='o', edgecolors='black')
+                        marker='o', edgecolors='grey')
     ax.set_title(f'ROTI Map at {time_point}')
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
@@ -219,7 +225,7 @@ def plot_sliding_window(
         ax.scatter(
             boundary_data['lon'],
             boundary_data['lat'], 
-            color='black',
+            color='grey',
             label=f'{boundary_condition} boundary'
         )
         ax.legend()
@@ -230,7 +236,7 @@ def plot_sliding_window(
         return fig, ax
 
 
-def plot_roti_dynamics(station_data, satellite, time_range=None, ax=None):
+def plot_roti_dynamics(station_data, satellite, time_point=None, ax=None):
     """
     Plots ROTI dynamics for a station-satellite pair.
 
@@ -268,12 +274,19 @@ def plot_roti_dynamics(station_data, satellite, time_range=None, ax=None):
     ax.set_ylabel("ROTI")
     ax.grid(True)
 
+    try:
+        time_dt = dt.strptime(time_point, "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=datetime.UTC)
+    except ValueError:
+        time_dt = dt.strptime(time_point, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.UTC)
+        
+    ax.axvspan(time_dt, time_dt + timedelta(minutes=5), color='red', alpha=0.3, label="Time Point")
+
     if created_fig:
         plt.show()
     else:
         return fig, ax
     
-def add_sat_traj(station_lat, station_lon, sat_azs, sat_els, sat_times, ax_list=None):
+def add_sat_traj(station_lat, station_lon, sat_azs, sat_els, sat_times, time_point, ax_list=None):
     trajectory = Trajectory(
         lat_site=station_lat,
         lon_site=station_lon,
@@ -287,10 +300,25 @@ def add_sat_traj(station_lat, station_lon, sat_azs, sat_els, sat_times, ax_list=
 
     trajectory_elements = []
     if trajectory.traj_lat.size > 0 and trajectory.traj_lon.size > 0:
-        color='green'
+        color = 'black'
         for ax in ax_list:
+            # find the satellite position at that time and plots the point. 
+            try:
+                time_point_dt = dt.strptime(time_point, "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=datetime.UTC)
+            except ValueError:
+                time_point_dt = dt.strptime(time_point, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.UTC)
+
+            time_point_ts = time_point_dt.timestamp()
+            closest_idx = np.argmin(np.abs(np.array(sat_times) - time_point_ts))
+            try:
+                scatter = ax.scatter(
+                    trajectory.traj_lon[closest_idx], trajectory.traj_lat[closest_idx],
+                    color='green', marker='o', s=40, label="Time Point", edgecolor=color
+                )
+            except Exception:
+                scatter = ax.scatter(trajectory.traj_lon[0], trajectory.traj_lat[0], color='green', marker='o', s=40, edgecolor=color, alpha=0)
+            # plot sattelite trajectory
             line, = ax.plot(trajectory.traj_lon, trajectory.traj_lat, color=color, label="Trajectory", linewidth=2)
-            scatter = ax.scatter(trajectory.traj_lon[-1], trajectory.traj_lat[-1], color=color, marker='s', s=20, label="End")
 
             ax.legend()
             trajectory_elements.append((line, scatter))
@@ -356,14 +384,15 @@ def plot_combined_graphs(
             for satellite in h5file[station]:
                 dynamic_ax.clear()
 
-                plot_roti_dynamics(h5file[station], satellite, ax=dynamic_ax)
+                plot_roti_dynamics(h5file[station], satellite, time_point=time_point, ax=dynamic_ax)
                 trajectory_elements = add_sat_traj(
                     station_lat=h5file[station].attrs['lat'],
                     station_lon=h5file[station].attrs['lon'],
                     sat_azs=h5file[station][satellite]['azimuth'][:],
                     sat_els=h5file[station][satellite]['elevation'][:],
                     sat_times=h5file[station][satellite]['timestamp'][:],
-                    ax_list=[sl_win_ax, poly_ax]
+                    time_point=time_point,
+                    ax_list=[sl_win_ax, poly_ax, map_ax]
                 )
 
                 fig.suptitle(f'Graphs for {station}_{satellite} at {time_point}')
