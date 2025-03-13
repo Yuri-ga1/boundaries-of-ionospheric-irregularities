@@ -62,8 +62,7 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
             ha='center', va='center', rotation=45, 
             transform=ax.transAxes
         )
-        ax.set_xlim(-120, LON_CONDITION-5)
-        ax.set_ylim(LAT_CONDITION, 90)
+        
         if ax is None:
             plt.close()
             return
@@ -213,9 +212,11 @@ def plot_sliding_window(
     lat = np.array([entry['lat'] for entry in sliding_windows])
     vals = np.array([entry['vals'] for entry in sliding_windows])
     
-    ax.scatter(lon, lat, c=vals, cmap=cmap, norm=norm)
+    scatter_sliding = ax.scatter(lon, lat, c=vals, cmap=cmap, norm=norm)
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
+    fig.colorbar(scatter_sliding, ax=ax, label='Values')
+    
     if time_point:
         ax.set_title(f"Sliding Window at {time_point}")
     else:
@@ -327,7 +328,6 @@ def add_sat_traj(station_lat, station_lon, sat_azs, sat_els, sat_times, time_poi
                 scatter = ax.scatter(trajectory.traj_lon[0], trajectory.traj_lat[0], color='green', marker='o', s=40, edgecolor=color, alpha=0)
             # plot sattelite trajectory
             line, = ax.plot(trajectory.traj_lon, trajectory.traj_lat, color=color, label="Trajectory", linewidth=2)
-
             ax.legend()
             trajectory_elements.append((line, scatter))
 
@@ -360,6 +360,15 @@ def plot_combined_graphs(
     poly_ax = fig.add_subplot(gs[1, 0])
     dynamic_ax = fig.add_subplot(gs[1, 1])
     
+    common_xlim = (-120, LON_CONDITION)
+    common_ylim = (LAT_CONDITION, 90)
+    
+    satellites = ['G01']
+    # Create axes for all graphs
+    for ax in [map_ax, sl_win_ax, poly_ax, dynamic_ax]:
+        ax.set_xlim(common_xlim)
+        ax.set_ylim(common_ylim)
+    
     # 1. ROTI map
     plot_roti_map(
         roti_points=map_points,
@@ -389,7 +398,8 @@ def plot_combined_graphs(
             stations = h5file.keys()
 
         for station in stations:
-            for satellite in h5file[station]:
+            for satellite in satellites:
+            # for satellite in h5file[station]:
                 dynamic_ax.clear()
 
                 plot_roti_dynamics(h5file[station], satellite, time_point=time_point, ax=dynamic_ax)
@@ -403,8 +413,16 @@ def plot_combined_graphs(
                     ax_list=[sl_win_ax, poly_ax, map_ax]
                 )
 
+                poly_ax.legend(loc='center left', bbox_to_anchor=(1.02, 0.5))
                 fig.suptitle(f'Graphs for {station}_{satellite} at {time_point}')
                 fig.tight_layout()
+                
+                map_box = map_ax.get_position()
+                poly_box = poly_ax.get_position()
+                dynamic_box = dynamic_ax.get_position()
+                
+                poly_ax.set_position([poly_box.x0, poly_box.y0, map_box.width, poly_box.height])
+                dynamic_ax.set_position([dynamic_box.x0, dynamic_box.y0, map_box.width, dynamic_box.height])
 
                 if save_to_file:
                     output_dir = os.path.join(FRAME_GRAPHS_PATH, station, satellite)
@@ -414,7 +432,7 @@ def plot_combined_graphs(
                     remove_traj_lines(trajectory_elements)
                 else:
                     fig.canvas.draw()
-                    plt.pause(20)
+                    plt.pause(60)
                     remove_traj_lines(trajectory_elements)
                     
 
