@@ -269,10 +269,18 @@ def plot_roti_dynamics(station_data, satellite, time_point=None, ax=None):
 
     ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.3f'))
 
+    y_max = max(roti)
+    y_lim = ((y_max // 0.5) + 1) * 0.5
+    ax.set_ylim(0, y_lim)
+
+    ax.yaxis.set_major_locator(ticker.MultipleLocator(0.5))
+    ax.yaxis.set_minor_locator(ticker.MultipleLocator(0.1))
+    ax.grid(True, which='major', linewidth=1, linestyle='-', alpha=0.7)
+    ax.grid(True, which='minor', linestyle='--', alpha=0.4)
+
     ax.set_title(f"ROTI Dynamics for {satellite}")
     ax.set_xlabel("Time")
     ax.set_ylabel("ROTI")
-    ax.grid(True)
 
     try:
         time_dt = dt.strptime(time_point, "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=datetime.UTC)
