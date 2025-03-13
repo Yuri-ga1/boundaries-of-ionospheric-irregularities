@@ -48,10 +48,15 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
     :return: fig, ax objects.
     """
     created_fig = False
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    
     if ax is None:
         fig, ax = plt.subplots()
         created_fig = True
+        ax.set_title(f"Polygon at {time_point}")
     else:
+        ax.set_title(f"Polygon")
         fig = ax.figure
     
     entry = boundary_clusters.get(time_point)
@@ -120,20 +125,6 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
                     else:
                         ax.fill(x, y, 'purple', alpha=0.5)
                         ax.plot(x, y, 'y--', label=f'Polygon {i+1}')
-                        
-    ax.set_title(f"Polygon at {time_point}")
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-    
-    handles, labels = ax.get_legend_handles_labels()
-    unique_labels = []
-    unique_handles = []
-    for handle, label in zip(handles, labels):
-        if label not in unique_labels:
-            unique_labels.append(label)
-            unique_handles.append(handle)
-    
-    ax.legend(unique_handles, unique_labels)
     
     if created_fig:
         plt.show()
@@ -167,15 +158,17 @@ def plot_roti_map(roti_points, time_point, ax=None, cmap='coolwarm'):
     
     scatter = ax.scatter(lons, lats, c=rotis, cmap=cmap, norm=norm, 
                         marker='o', edgecolors='grey')
-    ax.set_title(f'ROTI Map at {time_point}')
+    
     ax.set_xlabel('Longitude')
     ax.set_ylabel('Latitude')
     ax.grid(True)
     fig.colorbar(scatter, ax=ax, label='ROTI')
     
     if created_fig:
+        ax.set_title(f'ROTI Map at {time_point}')
         plt.show()
     else:
+        ax.set_title(f'ROTI Map')
         return fig, ax
 
 
@@ -215,12 +208,7 @@ def plot_sliding_window(
     scatter_sliding = ax.scatter(lon, lat, c=vals, cmap=cmap, norm=norm)
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
-    fig.colorbar(scatter_sliding, ax=ax, label='Values')
-    
-    if time_point:
-        ax.set_title(f"Sliding Window at {time_point}")
-    else:
-        ax.set_title(f"Sliding Window")
+    fig.colorbar(scatter_sliding, ax=ax, label='Values')    
     
     if boundary_data['lon'] and boundary_data['lat']:
         ax.scatter(
@@ -232,8 +220,10 @@ def plot_sliding_window(
         ax.legend()
 
     if created_fig:
+        ax.set_title(f"Sliding Window at {time_point}")
         plt.show()
     else:
+        ax.set_title(f"Sliding Window")
         return fig, ax
 
 
@@ -279,7 +269,6 @@ def plot_roti_dynamics(station_data, satellite, time_point=None, ax=None):
     ax.grid(True, which='major', linewidth=1, linestyle='-', alpha=0.7)
     ax.grid(True, which='minor', linestyle='--', alpha=0.4)
 
-    ax.set_title(f"ROTI Dynamics for {satellite}")
     ax.set_xlabel("Time")
     ax.set_ylabel("ROTI")
 
@@ -291,8 +280,10 @@ def plot_roti_dynamics(station_data, satellite, time_point=None, ax=None):
     ax.axvspan(time_dt, time_dt + timedelta(minutes=5), color='red', alpha=0.3, label="Time Point")
 
     if created_fig:
+        ax.set_title(f"ROTI Dynamics for {satellite}")
         plt.show()
     else:
+        ax.set_title(f"ROTI Dynamics")
         return fig, ax
     
 def add_sat_traj(station_lat, station_lon, sat_azs, sat_els, sat_times, time_point, ax_list=None):
@@ -311,6 +302,13 @@ def add_sat_traj(station_lat, station_lon, sat_azs, sat_els, sat_times, time_poi
     if trajectory.traj_lat.size > 0 and trajectory.traj_lon.size > 0:
         color = 'black'
         for ax in ax_list:
+            handles, labels = ax.get_legend_handles_labels()
+            
+            seen = set()
+            filtered = [(h, l) for h, l in zip(handles, labels) if l not in seen and not seen.add(l)]
+            handles, labels = list(zip(*filtered)) if filtered else ([], [])
+            handles, labels = list(handles), list(labels)
+            
             # find the satellite position at that time and plots the point. 
             try:
                 time_point_dt = dt.strptime(time_point, "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=datetime.UTC)
@@ -318,18 +316,26 @@ def add_sat_traj(station_lat, station_lon, sat_azs, sat_els, sat_times, time_poi
                 time_point_dt = dt.strptime(time_point, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.UTC)
 
             time_point_ts = time_point_dt.timestamp()
-            closest_idx = np.argmin(np.abs(np.array(sat_times) - time_point_ts))
+            closest_idx = np.argmin(np.abs(np.array(trajectory.times) - time_point_ts))
             try:
                 scatter = ax.scatter(
                     trajectory.traj_lon[closest_idx], trajectory.traj_lat[closest_idx],
-                    color='green', marker='o', s=40, label="Time Point", edgecolor=color
+                    color='green', marker='o', s=40, edgecolor=color
                 )
             except Exception:
                 scatter = ax.scatter(trajectory.traj_lon[0], trajectory.traj_lat[0], color='green', marker='o', s=40, edgecolor=color, alpha=0)
             # plot sattelite trajectory
-            line, = ax.plot(trajectory.traj_lon, trajectory.traj_lat, color=color, label="Trajectory", linewidth=2)
-            ax.legend()
+            line, = ax.plot(trajectory.traj_lon, trajectory.traj_lat, color=color, linewidth=2)
             trajectory_elements.append((line, scatter))
+            
+            # create legend
+            
+            handles.append(scatter)
+            labels.append("Time Point")
+            handles.append(line)
+            labels.append("Trajectory")
+            
+            ax.legend(handles, labels, loc='upper right', bbox_to_anchor=(1, 1))
 
     return trajectory_elements
 
@@ -363,7 +369,6 @@ def plot_combined_graphs(
     common_xlim = (-120, LON_CONDITION)
     common_ylim = (LAT_CONDITION, 90)
     
-    satellites = ['G01']
     # Create axes for all graphs
     for ax in [map_ax, sl_win_ax, poly_ax, dynamic_ax]:
         ax.set_xlim(common_xlim)
@@ -398,8 +403,7 @@ def plot_combined_graphs(
             stations = h5file.keys()
 
         for station in stations:
-            for satellite in satellites:
-            # for satellite in h5file[station]:
+            for satellite in h5file[station]:
                 dynamic_ax.clear()
 
                 plot_roti_dynamics(h5file[station], satellite, time_point=time_point, ax=dynamic_ax)
@@ -410,10 +414,9 @@ def plot_combined_graphs(
                     sat_els=h5file[station][satellite]['elevation'][:],
                     sat_times=h5file[station][satellite]['timestamp'][:],
                     time_point=time_point,
-                    ax_list=[sl_win_ax, poly_ax, map_ax]
+                    ax_list=[map_ax, sl_win_ax, poly_ax]
                 )
 
-                poly_ax.legend(loc='center left', bbox_to_anchor=(1.02, 0.5))
                 fig.suptitle(f'Graphs for {station}_{satellite} at {time_point}')
                 fig.tight_layout()
                 
