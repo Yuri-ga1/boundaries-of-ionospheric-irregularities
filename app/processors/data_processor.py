@@ -82,9 +82,12 @@ class DataProcessor:
                        (lat >= current_lat) & (lat < current_lat + window_size[0])
                 
                 if np.any(mask):
+                    center_lon = current_lon + window_size[1] / 2
+                    center_lat = current_lat + window_size[0] / 2
+                    
                     windows.append({
-                        'lon': current_lon,
-                        'lat': current_lat,
+                        'lon': center_lon,
+                        'lat': center_lat,
                         'vals': np.median(vals[mask])
                     })
                 
