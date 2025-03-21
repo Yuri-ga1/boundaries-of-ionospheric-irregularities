@@ -161,7 +161,7 @@ class DataProcessor:
             
             valid_clusters = {label: count for label, count in label_counts.items() if count >= min_cluster_size}
             
-            if len(valid_clusters) < 2:
+            if len(valid_clusters) < 1:
                 return None
             
             sorted_clusters = sorted(valid_clusters, key=valid_clusters.get, reverse=True)
@@ -170,6 +170,24 @@ class DataProcessor:
             for idx, label in enumerate(sorted_clusters):
                 cluster = column_coords[labels == label]
                 cluster_dict[f"border{idx+1}"] = cluster.tolist()
+            
+            if len(sorted_clusters) == 1:
+                single_cluster = cluster_dict['border1'] 
+                left_edge = deepcopy(min(single_cluster, key=lambda p: p[0]))
+                right_edge = deepcopy(max(single_cluster, key=lambda p: p[0]))
+                
+                left_edge[1], right_edge[1] = bottom_edge_con, bottom_edge_con
+                
+                single_cluster = np.insert(single_cluster, 0, left_edge, axis=0)
+                single_cluster = np.insert(single_cluster, len(single_cluster), right_edge, axis=0)
+                single_cluster = self.__delete_circle(single_cluster, bottom_edge_con)
+                
+                if len(single_cluster) < min_cluster_size:
+                    return None
+                
+                cluster_dict["border1"] = single_cluster.tolist()
+                
+                return {"relation": "single-cluster", **cluster_dict}
             
             top_clusters = sorted_clusters[:2]
             
@@ -214,7 +232,7 @@ class DataProcessor:
                 top_cluster = self.__delete_circle(top_cluster, top_edge_con)
                 bottom_cluster = self.__delete_circle(bottom_cluster, bottom_edge_con)
 
-                if len(top_cluster) < 100 or len(bottom_cluster) < 100:
+                if len(top_cluster) < min_cluster_size or len(bottom_cluster) < min_cluster_size:
                     return None
 
                 cluster_dict[f"border{sorted_clusters.index(top_clusters[0]) + 1}"] = top_cluster.tolist()

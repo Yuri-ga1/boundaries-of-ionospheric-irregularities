@@ -38,41 +38,24 @@ def plot_clusters(cluster_dict, time_point):
     ax.legend()
     plt.show()
 
-def plot_polygon(boundary_clusters, time_point, ax=None):
+def compute_polygons(boundary_clusters, time_point):
     """
-    Plots boundary polygons based on the provided clusters.
-
+    Computes polygons and their intersection based on boundary clusters.
+    
     :param boundary_clusters: dict, boundary cluster data.
     :param time_point: str, timestamp for the data.
-    :param ax: matplotlib axis, optional.
-    :return: fig, ax objects.
+    :return: tuple (polygons, intersection, single_cluster_polygon)
     """
-    created_fig = False
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-    
-    if ax is None:
-        fig, ax = plt.subplots()
-        created_fig = True
-        ax.set_title(f"Polygon at {time_point}")
-    else:
-        ax.set_title(f"Polygon")
-        fig = ax.figure
-    
     entry = boundary_clusters.get(time_point)
-    if not entry or entry.get('relation') == "left-right":
-        ax.text(
-            0.5, 0.5, "No Data for Polygon", 
-            fontsize=12, color='red', alpha=0.7, 
-            ha='center', va='center', rotation=45, 
-            transform=ax.transAxes
-        )
-        
-        if ax is None:
-            plt.close()
-            return
-        else:
-            return fig, ax
+    if not entry:
+        return None, None, None
+    
+    if entry.get('relation') == "single-cluster":
+        polygon = Polygon(np.array(entry["border1"])).buffer(0)
+        return [(polygon, 'r', "Polygon")], None, polygon
+    
+    if entry.get('relation') == "left-right":
+        return None, None, None
     
     clusters = [np.array(entry[f"border{i+1}"]) for i in range(len(entry) - 1)]
     
@@ -80,51 +63,57 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
         polygon1 = Polygon(clusters[0]).buffer(0)
         polygon2 = Polygon(clusters[1]).buffer(0)
         intersection = polygon1.intersection(polygon2)
-
-        for poly, color, label in [(polygon1, 'b', "Polygon 1"), 
-                                 (polygon2, 'r', "Polygon 2")]:
-            if isinstance(poly, Polygon):
-                x, y = poly.exterior.xy
-                ax.plot(x, y, f'{color}--', label=label)
-            elif isinstance(poly, MultiPolygon):
-                for i, part in enumerate(poly.geoms):
-                    x, y = part.exterior.xy
-                    ax.plot(x, y, f'{color}--', label=f"{label}")
-                    
-        if not intersection.is_empty:
-            if isinstance(intersection, (Polygon, MultiPolygon)):
-                for poly in ([intersection] if isinstance(intersection, Polygon) 
-                           else intersection.geoms):
-                    x, y = poly.exterior.xy
-                    ax.fill(x, y, 'purple', alpha=0.5, label="Intersection")
         
-        for i in range(2, len(clusters)):
-            cluster = Polygon(clusters[i]).buffer(0)
-            
-            if isinstance(cluster, Polygon):
-                x, y = cluster.exterior.xy
-                if intersection.contains(cluster):
-                    intersection_without_cluster = intersection.intersection(cluster)
-                    if not intersection_without_cluster.is_empty:
-                        x, y = intersection_without_cluster.exterior.xy
-                        ax.fill(x, y, 'white')
-                        ax.plot(x, y, 'g--')
-                else:
-                    ax.fill(x, y, 'purple', alpha=0.5)
-                    ax.plot(x, y, 'y--', label=f'Polygon {i+1}')
-            elif isinstance(cluster, MultiPolygon):
-                for j, part in enumerate(cluster.geoms):
-                    x, y = part.exterior.xy
-                    if intersection.contains(part):
-                        pass
-                        # part_without_intersection = intersection.intersection(part)
-                        # if not part_without_intersection.is_empty:
-                        #     x, y = part_without_intersection.exterior.xy
-                        #     ax.fill(x, y, 'white', alpha=0.5)
-                        #     ax.plot(x, y, 'g--')
-                    else:
-                        ax.fill(x, y, 'purple', alpha=0.5)
-                        ax.plot(x, y, 'y--', label=f'Polygon {i+1}')
+        return [(polygon1, 'b', "Polygon 1"), (polygon2, 'r', "Polygon 2")], intersection, None
+    
+    return None, None, None
+
+def plot_polygon(boundary_clusters, time_point, ax=None):
+    """
+    Plots boundary polygons based on the provided clusters.
+    
+    :param boundary_clusters: dict, boundary cluster data.
+    :param time_point: str, timestamp for the data.
+    :param ax: matplotlib axis, optional.
+    :return: fig, ax objects.
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
+        created_fig = True
+        ax.set_title(f"Polygon at {time_point}")
+    else:
+        fig = ax.figure
+        created_fig = False
+    
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    
+    polygons, intersection, single_cluster_polygon = compute_polygons(boundary_clusters, time_point)
+    
+    if polygons is None:
+        ax.text(0.5, 0.5, "No Data for Polygon", fontsize=12, color='red', alpha=0.7, ha='center', va='center', 
+                rotation=45, transform=ax.transAxes)
+        if created_fig:
+            plt.show()
+        return fig, ax
+    
+    for poly, color, label in polygons:
+        if isinstance(poly, Polygon):
+            x, y = poly.exterior.xy
+            ax.plot(x, y, f'{color}--', label=label)
+        elif isinstance(poly, MultiPolygon):
+            for part in poly.geoms:
+                x, y = part.exterior.xy
+                ax.plot(x, y, f'{color}--', label=label)
+    
+    if single_cluster_polygon:
+        x, y = single_cluster_polygon.exterior.xy
+        ax.fill(x, y, 'purple', alpha=0.5, label="Polygon area")
+    
+    if intersection and not intersection.is_empty:
+        for poly in ([intersection] if isinstance(intersection, Polygon) else intersection.geoms):
+            x, y = poly.exterior.xy
+            ax.fill(x, y, 'purple', alpha=0.5, label="Intersection")
     
     if created_fig:
         plt.show()
