@@ -17,10 +17,17 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Point
 
 def check_satellite_crossing(borders, satellites, threshold=10800):
-    """Определяет моменты пересечения границ спутниками."""
+    """
+    Identifies moments when satellites cross boundaries, marking "entered" or "exited" events.
+
+    :param borders: dict, containing boundary data for each timestamp.
+    :param satellites: dict, containing satellite data with 'lon' and 'lat' for each timestamp.
+    :param threshold: int, the time threshold in seconds to group crossings.
+    :return: dict, a dictionary with satellite IDs as keys and a list of crossing events with timestamps and event types.
+    """
     crossings = {}
     time_keys = sorted(borders.keys())
-    
+
     for i in range(len(time_keys) - 1):
         t1, t2 = time_keys[i], time_keys[i + 1]
         if not borders[t1] or not borders[t2]:
@@ -40,15 +47,24 @@ def check_satellite_crossing(borders, satellites, threshold=10800):
             if sat in satellites.get(t2, {}):
                 pos2 = Point(satellites[t2][sat]['lon'], satellites[t2][sat]['lat'])
 
-            if pos2 and ((boundary1.contains(pos1) and not boundary2.contains(pos2)) or
-                         (not boundary1.contains(pos1) and boundary2.contains(pos2))):
+            if pos2:
+                was_inside = boundary1.contains(pos1)
+                is_inside = boundary2.contains(pos2)
+
+                if was_inside and not is_inside:
+                    event_type = "exited"
+                elif not was_inside and is_inside:
+                    event_type = "entered"
+                else:
+                    continue
+
                 if sat not in crossings:
                     crossings[sat] = []
 
-                if not crossings[sat] or (dt.strptime(t2, "%Y-%m-%d %H:%M:%S.%f") - dt.strptime(crossings[sat][-1][-1], "%Y-%m-%d %H:%M:%S.%f")).total_seconds() > threshold:
+                if not crossings[sat] or (dt.strptime(t2, "%Y-%m-%d %H:%M:%S.%f") - dt.strptime(crossings[sat][-1][-1]['time'], "%Y-%m-%d %H:%M:%S.%f")).total_seconds() > threshold:
                     crossings[sat].append([])
 
-                crossings[sat][-1].append(t2)
+                crossings[sat][-1].append({"time": t2, "event": event_type})
 
     return crossings
 
@@ -68,17 +84,17 @@ if __name__ == "__main__":
     #     content = file.read()
     #     stations = content.replace("dict_keys([", "").replace("])", "").replace("'", "").split(", ")
     
-    file_path = os.path.join("files", "meshing", 'roti_2019_134_-90_90_N_-180_180_E_ec78.h5')
-    boundary = data_processor.process(
-        file_path=file_path,
-        roti_file="files/2019-05-14.h5",
-        stations=['picl', 'dubo', 'gilc']
-        # stations=['sask', 'picl', 'dubo', 'gilc']
-        # stations=['chur', 'rabc', 'repc', 'kugc', 'will']
-    )
+    # file_path = os.path.join("files", "meshing", 'roti_2019_134_-90_90_N_-180_180_E_ec78.h5')
+    # boundary = data_processor.process(
+    #     file_path=file_path,
+    #     roti_file="files/2019-05-14.h5",
+    #     stations=['picl', 'dubo', 'gilc']
+    #     # stations=['sask', 'picl', 'dubo', 'gilc']
+    #     # stations=['chur', 'rabc', 'repc', 'kugc', 'will']
+    # )
     
-    with open('boundary_clusters.json', "w") as file:
-        json.dump(boundary, file, indent=4)
+    # with open('boundary_clusters.json', "w") as file:
+    #     json.dump(boundary, file, indent=4)
     
     # with RinexProcessor("files/2019-05-14.h5") as processor:
     #     processor.process()
@@ -135,8 +151,9 @@ if __name__ == "__main__":
             for group in time_groups:
                 crossings_count = len(group)
                 if 0 <= crossings_count < 2:
-                    sorted_entries.append(f"{key} crossings border {crossings_count}: {group}\n")
-        
+                    events = ", ".join(f"{entry['time']} ({entry['event']})" for entry in group)
+                    sorted_entries.append(f"{key} crossings border {crossings_count}: {events}\n")
+
         for entry in sorted(sorted_entries):
             file.write(entry)
     """"""
