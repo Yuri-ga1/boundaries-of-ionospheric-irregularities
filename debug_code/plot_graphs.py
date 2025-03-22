@@ -84,6 +84,7 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
     else:
         fig = ax.figure
         created_fig = False
+        ax.set_title(f"Polygon")
     
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
