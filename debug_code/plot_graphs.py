@@ -198,7 +198,7 @@ def plot_sliding_window(
     scatter_sliding = ax.scatter(lon, lat, c=vals, cmap=cmap, norm=norm)
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
-    fig.colorbar(scatter_sliding, ax=ax, label='Values')    
+    fig.colorbar(scatter_sliding, ax=ax, label='ROTI')    
     
     if boundary_data['lon'] and boundary_data['lat']:
         ax.scatter(
