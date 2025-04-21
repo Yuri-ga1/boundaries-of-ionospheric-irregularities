@@ -57,28 +57,32 @@ def check_satellite_crossing(borders, satellites, threshold=10800):
                     event_type = "entered"
                 else:
                     continue
+                
+                st, sat = sat.split('_')
 
-                if sat not in crossings:
-                    crossings[sat] = []
+                if st not in crossings:
+                    crossings[st] = {}
+                if sat not in crossings[st]:
+                    crossings[st][sat] = []
 
-                if not crossings[sat] or (dt.strptime(t2, "%Y-%m-%d %H:%M:%S.%f") - dt.strptime(crossings[sat][-1][-1]['time'], "%Y-%m-%d %H:%M:%S.%f")).total_seconds() > threshold:
-                    crossings[sat].append([])
+                if not crossings[st][sat] or (dt.strptime(t2, "%Y-%m-%d %H:%M:%S.%f") - dt.strptime(crossings[st][sat][-1][-1]['time'], "%Y-%m-%d %H:%M:%S.%f")).total_seconds() > threshold:
+                    crossings[st][sat].append([])
 
-                crossings[sat][-1].append({"time": t2, "event": event_type})
+                crossings[st][sat][-1].append({"time": t2, "event": event_type})
 
     return crossings
 
 if __name__ == "__main__":
     np.set_printoptions(threshold=np.inf)
     
-    data_processor = DataProcessor(
-        lon_condition=LON_CONDITION,
-        lat_condition=LAT_CONDITION,
-        segment_lon_step=SEGMENT_LON_STEP,
-        segment_lat_step=SEGMENT_LAT_STEP,
-        boundary_condition=BOUNDARY_CONDITION,
-        save_to_file=True
-    )
+    # data_processor = DataProcessor(
+    #     lon_condition=LON_CONDITION,
+    #     lat_condition=LAT_CONDITION,
+    #     segment_lon_step=SEGMENT_LON_STEP,
+    #     segment_lat_step=SEGMENT_LAT_STEP,
+    #     boundary_condition=BOUNDARY_CONDITION,
+    #     save_to_file=True
+    # )
     
     # with open("stations.txt", "r", encoding="utf-8") as file:
     #     content = file.read()
@@ -89,15 +93,49 @@ if __name__ == "__main__":
     #     file_path=file_path,
     #     roti_file="files/2019-05-14.h5",
     #     stations=['picl', 'dubo', 'gilc']
-    #     # stations=['sask', 'picl', 'dubo', 'gilc']
-    #     # stations=['chur', 'rabc', 'repc', 'kugc', 'will']
+        # stations=['sask', 'picl', 'dubo', 'gilc']
+        # stations=['chur', 'rabc', 'repc', 'kugc', 'will']
     # )
     
     # with open('boundary_clusters.json', "w") as file:
     #     json.dump(boundary, file, indent=4)
     
     # with RinexProcessor("files/2019-05-14.h5") as processor:
+    #     print('Process Rinex')
     #     processor.process()
+    #     print('Get flybys')
+        
+    #     flybys = processor.flybys
+        
+    #     print('Save flybys in file')
+    #     with open('flybys.json', "w") as file:
+    #         json.dump(flybys, file, indent=4)
+        
+    #     print('Plot flybys graph')
+    #     roti = flybys['picl']['G01']['flyby0']['roti']
+    #     ts = flybys['picl']['G01']['flyby0']['timestamps']
+    #     plot_flyby(roti=roti, ts=ts)
+    
+    
+    with open('flybys.json', "r") as file:
+        flybys = json.load(file)
+    
+    with open('crossings.json', "r") as file:
+        crossings = json.load(file)
+    
+    stations = flybys.keys()
+    for st in stations:
+        satellites = flybys[st].keys()
+        for sat in satellites:
+            flyby_keys = list(flybys[st][sat].keys())
+            for fb_index, fb_key in enumerate(flyby_keys):
+                roti = flybys[st][sat][fb_key]['roti']
+                ts = flybys[st][sat][fb_key]['timestamps']
+                crossing_events = crossings.get(st, {}).get(sat, [])
+                if fb_index < len(crossing_events):
+                    plot_flyby(roti=roti, ts=ts, station=st, satellite=sat, crossing_events=crossing_events[fb_index])
+                else:
+                    break
         
     #     with open('roti_data.json', "w") as file:
     #         json.dump(processor.data, file, indent=4)
@@ -134,28 +172,32 @@ if __name__ == "__main__":
     """
     Calculate satellite crossing count
     """
-    with open('boundary_clusters.json', "r") as file:
-        boundary = json.load(file)
+    # with open('boundary_clusters.json', "r") as file:
+    #     boundary = json.load(file)
 
-    with open('roti_data.json', "r") as file:
-        satellite_data = json.load(file)
+    # with open('roti_data.json', "r") as file:
+    #     satellite_data = json.load(file)
 
-    crossings = check_satellite_crossing(boundary, satellite_data)
+    # crossings = check_satellite_crossing(boundary, satellite_data)
 
-    with open('crossings.json', "w") as file:
-        json.dump(crossings, file, indent=4)
+    # with open('crossings.json', "w") as file:
+    #     json.dump(crossings, file, indent=4)
 
-    sorted_entries = []
-    with open('count_crossing.txt', "w") as file:
-        for key, time_groups in crossings.items():
-            for group in time_groups:
-                crossings_count = len(group)
-                if 0 <= crossings_count < 2:
-                    events = ", ".join(f"{entry['time']} ({entry['event']})" for entry in group)
-                    sorted_entries.append(f"{key} crossings border {crossings_count}: {events}\n")
+    # sorted_entries = []
+    # with open('count_crossing.txt', "w") as file:
+    #     for key, time_groups in crossings.items():
+    #         for group in time_groups:
+    #             crossings_count = len(group)
+    #             if 0 <= crossings_count < 2:
+    #                 events = ", ".join(f"{entry['time']} ({entry['event']})" for entry in group)
+    #                 sorted_entries.append(f"{key} crossings border {crossings_count}: {events}\n")
 
-        for entry in sorted(sorted_entries):
-            file.write(entry)
+    #     for entry in sorted(sorted_entries):
+    #         file.write(entry)
     """"""
-    converter = PngToVideoConverter(input_dir=FRAME_GRAPHS_PATH, output_dir=SAVE_VIDEO_PATH)
-    converter.process_images_to_video()
+    # converter = PngToVideoConverter(input_dir=FRAME_GRAPHS_PATH, output_dir=SAVE_VIDEO_PATH)
+    # converter.process_images_to_video()
+    
+    """
+    Inside/out polygon by satellite flyby
+    """

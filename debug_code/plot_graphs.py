@@ -330,6 +330,60 @@ def add_sat_traj(station_lat, station_lon, sat_azs, sat_els, sat_times, time_poi
     return trajectory_elements
 
 
+def plot_flyby(roti, ts, station, satellite, crossing_events=None, ax=None):
+    created_fig = False
+    if ax is None:
+        fig, ax = plt.subplots()
+        created_fig = True
+    else:
+        fig = ax.figure
+
+    times = [dt.fromtimestamp(float(t), datetime.UTC) for t in ts]
+    ax.scatter(times, roti)
+
+    ax.set_xlim(min(times), max(times))
+
+    ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+    ax.tick_params(axis='x', rotation=45)
+
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.3f'))
+
+    y_max = max(roti)
+    y_lim = ((y_max // 0.5) + 1) * 0.5
+    ax.set_ylim(0, y_lim)
+
+    ax.yaxis.set_major_locator(ticker.MultipleLocator(0.5))
+    ax.yaxis.set_minor_locator(ticker.MultipleLocator(0.1))
+    ax.grid(True, which='major', linewidth=1, linestyle='-', alpha=0.7)
+    ax.grid(True, which='minor', linestyle='--', alpha=0.4)
+
+    ax.set_xlabel("Time")
+    ax.set_ylabel("ROTI")
+
+    if crossing_events:
+        events = sorted(crossing_events, key=lambda e: dt.strptime(e['time'], "%Y-%m-%d %H:%M:%S.%f"))
+        event_times = [dt.strptime(e['time'], "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=datetime.UTC) for e in events]
+        event_types = [e['event'] for e in events]
+
+        last_time = times[0]
+
+        for t, e in zip(event_times, event_types):
+            color = 'green' if e == 'entered' else 'red'
+            ax.axvspan(last_time, t, color=color, alpha=0.3)
+            last_time = t
+
+        final_color = 'red' if event_types[-1] == 'entered' else 'green'
+        ax.axvspan(last_time, times[-1], color=final_color, alpha=0.3)
+
+
+    if created_fig:
+        ax.set_title(f"Flyby for {station}_{satellite}")
+        plt.show()
+    else:
+        ax.set_title(f"Flyby for {station}_{satellite}")
+        return fig, ax
+
 def plot_combined_graphs(
     map_points, sliding_windows, boundary_data, boundary_condition,
     time_point, boundary_clusters, roti_file, stations = None, save_to_file=False

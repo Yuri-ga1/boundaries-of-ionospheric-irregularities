@@ -13,10 +13,12 @@ class RinexProcessor:
         self.file_path = file_path
         self.filename = os.path.basename(file_path)
         self.file = None
-        self.stations_coords = {}
-        self.data = {}
         self.lon_condition = LON_CONDITION
         self.lat_condition = LAT_CONDITION
+        
+        self.stations_coords = {}
+        self.data = {}
+        self.flybys = {}
     
     def __enter__(self):
         self.file = h5.File(self.file_path, 'r')
@@ -32,6 +34,25 @@ class RinexProcessor:
         if lat >= 0 and -2.53073 <= lon <= -0.523599:
             self.stations_coords[station_name] = {'lat': lat, 'lon': lon}
             
+    def __process_flyby(self, station_name, satellite_name, roti, ts):
+        time_diffs = np.diff(ts)
+        pass_indices = np.where(time_diffs >= 1800)[0] + 1
+        pass_splits = np.split(np.arange(len(ts)), pass_indices)
+
+        if station_name not in self.flybys:
+            self.flybys[station_name] = {}
+        if satellite_name not in self.flybys[station_name]:
+            self.flybys[station_name][satellite_name] = {}
+
+        for pass_num, indices in enumerate(pass_splits):
+            flyby_roti = roti[indices]
+            flyby_ts = ts[indices]
+
+            self.flybys[station_name][satellite_name][f'flyby{pass_num}'] = {
+                'roti': flyby_roti.tolist(),
+                'timestamps': flyby_ts.tolist(),
+            }
+            
     def __process_satellite(self, station_name, satellite_name):
         logger.info(f"Processing {station_name}_-_{satellite_name}")
         
@@ -39,6 +60,8 @@ class RinexProcessor:
         azs = self.file[station_name][satellite_name]['azimuth'][:]
         els = self.file[station_name][satellite_name]['elevation'][:]
         ts = self.file[station_name][satellite_name]['timestamp'][:]
+        
+        self.__process_flyby(station_name, satellite_name, roti, ts)
         
         el_mask = (els >= np.radians(10))
         roti = roti[el_mask]
