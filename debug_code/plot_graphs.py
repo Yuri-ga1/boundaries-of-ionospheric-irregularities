@@ -329,6 +329,66 @@ def add_sat_traj(station_lat, station_lon, sat_azs, sat_els, sat_times, time_poi
 
     return trajectory_elements
 
+def clean_events(event_times, event_types):
+    dedup_times = []
+    dedup_types = []
+    for idx, (t, e) in enumerate(zip(event_times, event_types)):
+        if idx == 0 or e != event_types[idx - 1]:
+            dedup_times.append(t)
+            dedup_types.append(e)
+            
+    i = 0
+    cleaned_times = []
+    cleaned_types = []
+
+    while i < len(event_times):
+        current_time = event_times[i]
+        current_type = event_types[i]
+
+        j = i + 1
+        future = []
+        while j < len(event_times) and event_times[j] <= current_time + timedelta(minutes=15):
+            future.append((event_times[j], event_types[j]))
+            j += 1
+
+        if len(future) == 1:
+            cleaned_times.append(future[0][0])
+            cleaned_types.append(current_type)
+            i = j
+        elif len(future) >= 2:
+            k = j-1
+            look_time = event_times[k]
+
+            while k < len(event_times):
+                m = k + 1
+                count = 0
+
+                while m < len(event_times) and event_times[m] <= look_time + timedelta(minutes=15):
+                    count += 1
+                    m += 1
+
+                if count >= 2:
+                    look_time = event_times[m - 1]
+                    k = m
+                else:
+                    cleaned_times.append(event_times[m - 1])
+                    cleaned_types.append(event_types[m - 1])
+                    i = m
+                    break
+            
+        else:
+            cleaned_times.append(current_time)
+            cleaned_types.append(current_type)
+            i += 1
+        
+    final_times = []
+    final_types = []
+    for idx, (t, e) in enumerate(zip(cleaned_times, cleaned_types)):
+        if idx == len(cleaned_times) - 1 or e != cleaned_types[idx + 1]:
+            final_times.append(t)
+            final_types.append(e)
+
+    return final_times, final_types
 
 def plot_flyby(roti, ts, station, satellite, crossing_events=None, ax=None):
     created_fig = False
@@ -366,14 +426,31 @@ def plot_flyby(roti, ts, station, satellite, crossing_events=None, ax=None):
         event_times = [dt.strptime(e['time'], "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=datetime.UTC) for e in events]
         event_types = [e['event'] for e in events]
 
+        cleaned_times, cleaned_types = clean_events(event_times, event_types)
+        print(cleaned_types)
+        print(cleaned_times)
+        print()
+
         last_time = times[0]
+        for i in range(len(cleaned_times)):
+            current_time = cleaned_times[i]
+            current_event = cleaned_types[i]
 
-        for t, e in zip(event_times, event_types):
-            color = 'green' if e == 'entered' else 'red'
-            ax.axvspan(last_time, t, color=color, alpha=0.3)
-            last_time = t
+            color = {
+                "entered": "green",
+                "exited": "red",
+                "noise": "yellow"
+            }.get(current_event, "gray")
 
-        final_color = 'red' if event_types[-1] == 'entered' else 'green'
+            ax.axvspan(last_time, current_time, color=color, alpha=0.3)
+            last_time = current_time
+
+        final_color = {
+            "entered": "red",
+            "exited": "green",
+            "noise": "yellow"
+        }.get(cleaned_types[-1], "gray")
+
         ax.axvspan(last_time, times[-1], color=final_color, alpha=0.3)
 
 
