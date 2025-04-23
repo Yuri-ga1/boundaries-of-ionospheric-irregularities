@@ -11,8 +11,8 @@ from debug_code.plot_graphs import *
 import numpy as np
 
 import matplotlib.pyplot as plt
-# import matplotlib
-# matplotlib.use('Agg')
+import matplotlib
+matplotlib.use('Agg')
 
 from shapely.geometry import Point
 
@@ -132,10 +132,24 @@ if __name__ == "__main__":
                 roti = flybys[st][sat][fb_key]['roti']
                 ts = flybys[st][sat][fb_key]['timestamps']
                 crossing_events = crossings.get(st, {}).get(sat, [])
+                
+                fig, ax = plt.subplots(figsize=(10, 5))
+
                 if fb_index < len(crossing_events):
-                    plot_flyby(roti=roti, ts=ts, station=st, satellite=sat, crossing_events=crossing_events[fb_index])
+                    
+                    plot_flyby(roti=roti, ts=ts, station=st, satellite=sat,
+                            crossing_events=crossing_events[fb_index], ax=ax)
                 else:
+                    logger.warning(f'Break {st}_{sat}_{fb_key}')
+                    plt.close()
                     break
+
+                save_dir = os.path.join("graphs", "flybys", st)
+                os.makedirs(save_dir, exist_ok=True)
+
+                save_path = os.path.join(save_dir, f"{sat}_flyby_{fb_index}.png")
+                fig.savefig(save_path, bbox_inches="tight")
+                plt.close(fig)
         
     #     with open('roti_data.json', "w") as file:
     #         json.dump(processor.data, file, indent=4)
