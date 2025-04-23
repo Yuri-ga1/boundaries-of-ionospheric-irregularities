@@ -72,63 +72,30 @@ def check_satellite_crossing(borders, satellites, threshold=10800):
 
     return crossings
 
-if __name__ == "__main__":
-    np.set_printoptions(threshold=np.inf)
+def process_flyby(
+    full_meshing_path,
+    full_rinex_path,
+    date_str
+):
+    boundary = data_processor.process(
+        file_path=full_meshing_path,
+        roti_file=full_rinex_path,
+    )
     
-    # data_processor = DataProcessor(
-    #     lon_condition=LON_CONDITION,
-    #     lat_condition=LAT_CONDITION,
-    #     segment_lon_step=SEGMENT_LON_STEP,
-    #     segment_lat_step=SEGMENT_LAT_STEP,
-    #     boundary_condition=BOUNDARY_CONDITION,
-    #     save_to_file=True
-    # )
-    
-    # with open("stations.txt", "r", encoding="utf-8") as file:
-    #     content = file.read()
-    #     stations = content.replace("dict_keys([", "").replace("])", "").replace("'", "").split(", ")
-    
-    # file_path = os.path.join("files", "meshing", 'roti_2019_134_-90_90_N_-180_180_E_ec78.h5')
-    # boundary = data_processor.process(
-    #     file_path=file_path,
-    #     roti_file="files/2019-05-14.h5",
-    #     stations=['picl', 'dubo', 'gilc']
-        # stations=['sask', 'picl', 'dubo', 'gilc']
-        # stations=['chur', 'rabc', 'repc', 'kugc', 'will']
-    # )
-    
-    # with open('boundary_clusters.json', "w") as file:
-    #     json.dump(boundary, file, indent=4)
-    
-    # with RinexProcessor("files/2019-05-14.h5") as processor:
-    #     print('Process Rinex')
-    #     processor.process()
-    #     print('Get flybys')
-        
-    #     flybys = processor.flybys
-        
-    #     print('Save flybys in file')
-    #     with open('flybys.json', "w") as file:
-    #         json.dump(flybys, file, indent=4)
-        
-    #     print('Plot flybys graph')
-    #     roti = flybys['picl']['G01']['flyby0']['roti']
-    #     ts = flybys['picl']['G01']['flyby0']['timestamps']
-    #     plot_flyby(roti=roti, ts=ts)
-    
-    
-    with open('flybys.json', "r") as file:
-        flybys = json.load(file)
-    
-    with open('crossings.json', "r") as file:
-        crossings = json.load(file)
-    
+    with RinexProcessor(full_rinex_path) as processor:
+        processor.process()
+        satellite_data = processor.data
+        flybys = processor.flybys
+
+    crossings = check_satellite_crossing(boundary, satellite_data)
     stations = flybys.keys()
+
     for st in stations:
         satellites = flybys[st].keys()
         for sat in satellites:
             flyby_keys = list(flybys[st][sat].keys())
             for fb_index, fb_key in enumerate(flyby_keys):
+                logger.info(f"Process {st}_{sat}_{fb_key}")
                 roti = flybys[st][sat][fb_key]['roti']
                 ts = flybys[st][sat][fb_key]['timestamps']
                 crossing_events = crossings.get(st, {}).get(sat, [])
@@ -136,20 +103,62 @@ if __name__ == "__main__":
                 fig, ax = plt.subplots(figsize=(10, 5))
 
                 if fb_index < len(crossing_events):
-                    
                     plot_flyby(roti=roti, ts=ts, station=st, satellite=sat,
                             crossing_events=crossing_events[fb_index], ax=ax)
+                    
+                    save_dir = os.path.join(FLYBYS_GRAPHS_PATH, date_str, st)
+                    os.makedirs(save_dir, exist_ok=True)
+
+                    save_path = os.path.join(save_dir, f"{sat}_flyby_{fb_index}.png")
+                    fig.savefig(save_path, bbox_inches="tight")
+                    plt.close(fig)
                 else:
                     logger.warning(f'Break {st}_{sat}_{fb_key}')
-                    plt.close()
+                    plt.close(fig)
                     break
 
-                save_dir = os.path.join("graphs", "flybys", st)
-                os.makedirs(save_dir, exist_ok=True)
+if __name__ == "__main__":
+    np.set_printoptions(threshold=np.inf)
 
-                save_path = os.path.join(save_dir, f"{sat}_flyby_{fb_index}.png")
-                fig.savefig(save_path, bbox_inches="tight")
-                plt.close(fig)
+    data_processor = DataProcessor(
+        lon_condition=LON_CONDITION,
+        lat_condition=LAT_CONDITION,
+        segment_lon_step=SEGMENT_LON_STEP,
+        segment_lat_step=SEGMENT_LAT_STEP,
+        boundary_condition=BOUNDARY_CONDITION,
+        save_to_file=False
+    )
+    
+    for rinex_file in os.listdir(FILES_PATH):
+        if rinex_file.endswith('.h5') and os.path.isfile(os.path.join(FILES_PATH, rinex_file)):
+            try:
+                date_str = rinex_file.split('.')[0]
+                date_obj = dt.strptime(date_str, '%Y-%m-%d')
+                
+                year = date_obj.year
+                doy = date_obj.timetuple().tm_yday
+                search_pattern = f'roti_{year}_{doy}'
+                
+                for meshing_file in os.listdir(MESHING_PATH):
+                    if search_pattern in meshing_file and meshing_file.endswith('.h5'):
+                        full_meshing_path = os.path.join(MESHING_PATH, meshing_file)
+                        full_rinex_path = os.path.join(FILES_PATH, rinex_file)
+                        logger.debug(f"Для файла {rinex_file} найден meshing файл: {full_meshing_path}")
+
+                        process_flyby(
+                            full_meshing_path=full_meshing_path,
+                            full_rinex_path=full_rinex_path,
+                            date_str=date_str
+                        )
+
+                        break
+                else:
+                    logger.warning(f"Не найден meshing файл для паттерна: {search_pattern}")
+                    
+            except ValueError:
+                logger.error(f"Некорректный формат имени файла: {rinex_file}")
+
+    
         
     #     with open('roti_data.json', "w") as file:
     #         json.dump(processor.data, file, indent=4)
@@ -215,3 +224,37 @@ if __name__ == "__main__":
     """
     Inside/out polygon by satellite flyby
     """
+    # with open('flybys.json', "r") as file:
+    #     flybys = json.load(file)
+    
+    # with open('crossings.json', "r") as file:
+    #     crossings = json.load(file)
+
+    # stations = flybys.keys()
+    # for st in stations:
+    #     satellites = flybys[st].keys()
+    #     for sat in satellites:
+    #         flyby_keys = list(flybys[st][sat].keys())
+    #         for fb_index, fb_key in enumerate(flyby_keys):
+    #             logger.info(f"Process {st}_{sat}_{fb_key}")
+    #             roti = flybys[st][sat][fb_key]['roti']
+    #             ts = flybys[st][sat][fb_key]['timestamps']
+    #             crossing_events = crossings.get(st, {}).get(sat, [])
+                
+    #             fig, ax = plt.subplots(figsize=(10, 5))
+
+    #             if fb_index < len(crossing_events):
+                    
+    #                 plot_flyby(roti=roti, ts=ts, station=st, satellite=sat,
+    #                         crossing_events=crossing_events[fb_index], ax=ax)
+    #             else:
+    #                 logger.warning(f'Break {st}_{sat}_{fb_key}')
+    #                 plt.close()
+    #                 break
+
+    #             save_dir = os.path.join("graphs", "flybys", st)
+    #             os.makedirs(save_dir, exist_ok=True)
+
+    #             save_path = os.path.join(save_dir, f"{sat}_flyby_{fb_index}.png")
+    #             fig.savefig(save_path, bbox_inches="tight")
+    #             plt.close(fig)
