@@ -277,16 +277,16 @@ class DataProcessor:
                     lon_list=boundary_data['lon']
                 )
                 
-                plot_combined_graphs(
-                    map_points=filtered_points,
-                    sliding_windows=sliding_windows,
-                    boundary_data=boundary_data,
-                    boundary_condition=BOUNDARY_CONDITION,
-                    time_point=time_point,
-                    boundary_clusters=result,
-                    roti_file=roti_file,
-                    stations=stations,
-                    save_to_file=self.save_to_file
-                )
+                # plot_combined_graphs(
+                #     map_points=filtered_points,
+                #     sliding_windows=sliding_windows,
+                #     boundary_data=boundary_data,
+                #     boundary_condition=BOUNDARY_CONDITION,
+                #     time_point=time_point,
+                #     boundary_clusters=result,
+                #     roti_file=roti_file,
+                #     stations=stations,
+                #     save_to_file=self.save_to_file
+                # )
                     
         return result
