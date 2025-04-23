@@ -4,6 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Egor Borvenko <borvenkoegor@gmail.com>"]
 readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -23,6 +24,8 @@ scipy = "1.15.1"
 setuptools = "75.1.0"
 six = "1.16.0"
 wheel = "0.44.0"
+imageio = "^2.37.0"
+shapely = "^2.1.0"
 
 
 [build-system]
