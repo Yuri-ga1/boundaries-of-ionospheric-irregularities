@@ -54,8 +54,6 @@ class RinexProcessor:
             }
             
     def __process_satellite(self, station_name, satellite_name):
-        logger.info(f"Processing {station_name}_-_{satellite_name}")
-        
         roti = self.file[station_name][satellite_name]['roti'][:]
         azs = self.file[station_name][satellite_name]['azimuth'][:]
         els = self.file[station_name][satellite_name]['elevation'][:]
@@ -115,6 +113,7 @@ class RinexProcessor:
             self.__save_station_coords(station)
         
         for station_name in self.stations_coords:
+            logger.info(f"Processing {station_name}")
             for satellite_name in self.file[station_name]:
                 result = self.__process_satellite(station_name, satellite_name)
                 
