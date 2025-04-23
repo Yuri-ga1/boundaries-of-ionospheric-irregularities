@@ -1,4 +1,5 @@
 from matplotlib.gridspec import GridSpec
+from matplotlib.patches import Patch
 import matplotlib.ticker as ticker
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -427,9 +428,6 @@ def plot_flyby(roti, ts, station, satellite, crossing_events=None, ax=None):
         event_types = [e['event'] for e in events]
 
         cleaned_times, cleaned_types = clean_events(event_times, event_types)
-        print(cleaned_types)
-        print(cleaned_times)
-        print()
 
         last_time = times[0]
         for i in range(len(cleaned_times)):
@@ -453,12 +451,17 @@ def plot_flyby(roti, ts, station, satellite, crossing_events=None, ax=None):
 
         ax.axvspan(last_time, times[-1], color=final_color, alpha=0.3)
 
+        legend_elements = [
+            Patch(facecolor='red', alpha=0.3, label='Inside'),
+            # Patch(facecolor='yellow', alpha=0.3, label='Шум'),
+            Patch(facecolor='green', alpha=0.3, label='Outside')
+        ]
+        ax.legend(handles=legend_elements, loc='upper right')
 
+    ax.set_title(f"Flyby for {station}_{satellite}")
     if created_fig:
-        ax.set_title(f"Flyby for {station}_{satellite}")
         plt.show()
     else:
-        ax.set_title(f"Flyby for {station}_{satellite}")
         return fig, ax
 
 def plot_combined_graphs(
