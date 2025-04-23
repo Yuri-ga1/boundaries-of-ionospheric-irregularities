@@ -342,14 +342,14 @@ def clean_events(event_times, event_types):
     cleaned_times = []
     cleaned_types = []
 
-    while i < len(event_times):
-        current_time = event_times[i]
-        current_type = event_types[i]
+    while i < len(dedup_times):
+        current_time = dedup_times[i]
+        current_type = dedup_types[i]
 
         j = i + 1
         future = []
-        while j < len(event_times) and event_times[j] <= current_time + timedelta(minutes=15):
-            future.append((event_times[j], event_types[j]))
+        while j < len(dedup_times) and dedup_times[j] <= current_time + timedelta(minutes=15):
+            future.append((dedup_times[j], dedup_types[j]))
             j += 1
 
         if len(future) == 1:
@@ -358,22 +358,26 @@ def clean_events(event_times, event_types):
             i = j
         elif len(future) >= 2:
             k = j-1
-            look_time = event_times[k]
+            look_time = dedup_times[k]
 
-            while k < len(event_times):
+            while k < len(dedup_times):
                 m = k + 1
                 count = 0
 
-                while m < len(event_times) and event_times[m] <= look_time + timedelta(minutes=15):
+                while m < len(dedup_times) and dedup_times[m] <= look_time + timedelta(minutes=15):
                     count += 1
                     m += 1
 
                 if count >= 2:
-                    look_time = event_times[m - 1]
+                    look_time = dedup_times[m - 1]
                     k = m
+                    i = m
+                    if m >= len(dedup_times):
+                        cleaned_times.append(dedup_times[m - 1])
+                        cleaned_types.append(dedup_types[m - 1])
                 else:
-                    cleaned_times.append(event_times[m - 1])
-                    cleaned_types.append(event_types[m - 1])
+                    cleaned_times.append(dedup_times[m - 1])
+                    cleaned_types.append(dedup_types[m - 1])
                     i = m
                     break
             
