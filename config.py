@@ -15,9 +15,11 @@ HM = 300
 MIN_CLUSTER_SIZE = 100
 
 import os
-DIRECTORY_PATH =  os.path.join("files", "meshing")
+FILES_PATH = 'files'
+MESHING_PATH =  os.path.join(FILES_PATH, "meshing")
 
 FRAME_GRAPHS_PATH = os.path.join('graphs', 'combined')
+FLYBYS_GRAPHS_PATH = os.path.join("graphs", "flybys")
 SAVE_VIDEO_PATH = os.path.join('graphs', 'video')
 
 from custom_logger import Logger
