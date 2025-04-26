@@ -89,6 +89,7 @@ def process_flyby(
 
     crossings = check_satellite_crossing(boundary, satellite_data)
     stations = flybys.keys()
+    all_metadata = {}
 
     for st in stations:
         satellites = flybys[st].keys()
@@ -103,8 +104,10 @@ def process_flyby(
                 fig, ax = plt.subplots(figsize=(10, 5))
 
                 if fb_index < len(crossing_events):
-                    plot_flyby(roti=roti, ts=ts, station=st, satellite=sat,
-                            crossing_events=crossing_events[fb_index], ax=ax)
+                    fig, ax, metadata = plot_flyby(
+                        roti=roti, ts=ts, station=st, satellite=sat,
+                        crossing_events=crossing_events[fb_index], ax=ax
+                    )
                     
                     save_dir = os.path.join(FLYBYS_GRAPHS_PATH, date_str, st)
                     os.makedirs(save_dir, exist_ok=True)
@@ -112,10 +115,21 @@ def process_flyby(
                     save_path = os.path.join(save_dir, f"{sat}_flyby_{fb_index}.png")
                     fig.savefig(save_path, bbox_inches="tight")
                     plt.close(fig)
+
+                    relative_path = os.path.join(date_str, st, f"{sat}_flyby_{fb_index}.png")
+                    all_metadata[relative_path] = metadata
                 else:
                     logger.warning(f'Break {st}_{sat}_{fb_key}')
                     plt.close(fig)
                     break
+    metadata_save_dir = os.path.join(FLYBYS_GRAPHS_PATH, date_str)
+    os.makedirs(metadata_save_dir, exist_ok=True)
+    metadata_path = os.path.join(metadata_save_dir, 'metadata.json')
+
+    with open(metadata_path, 'w') as f:
+        json.dump(all_metadata, f, indent=4, ensure_ascii=False)
+
+    logger.info(f"Metadata saved to {metadata_path}")
 
 if __name__ == "__main__":
     np.set_printoptions(threshold=np.inf)

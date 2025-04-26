@@ -433,6 +433,12 @@ def plot_flyby(roti, ts, station, satellite, crossing_events=None, ax=None):
 
         cleaned_times, cleaned_types = clean_events(event_times, event_types)
 
+        if cleaned_times:
+            metadata = {
+                'final_times': [t.isoformat() for t in cleaned_times],
+                'final_types': cleaned_types
+            }
+
         last_time = times[0]
         for i in range(len(cleaned_times)):
             current_time = cleaned_times[i]
@@ -465,8 +471,9 @@ def plot_flyby(roti, ts, station, satellite, crossing_events=None, ax=None):
     ax.set_title(f"Flyby for {station}_{satellite}")
     if created_fig:
         plt.show()
+        return metadata
     else:
-        return fig, ax
+        return fig, ax, metadata
 
 def plot_combined_graphs(
     map_points, sliding_windows, boundary_data, boundary_condition,
