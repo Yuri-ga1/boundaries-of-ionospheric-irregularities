@@ -14,7 +14,7 @@ from debug_code.plot_graphs import *
 
 # TODO убедиться в точности последовательности точек
 
-class DataProcessor:
+class MapProcessor:
     def __init__(
         self,
         lon_condition: float,
@@ -25,7 +25,7 @@ class DataProcessor:
         save_to_file : bool = False
     ):
         """
-        Initializes the DataProcessor object.
+        Initializes the MapProcessor object.
 
         :param lon_condition: float, longitude condition for pole proximity.
         :param lat_condition: float, latitude condition for pole proximity.
@@ -243,15 +243,15 @@ class DataProcessor:
             }
 
 
-    def process(self, file_path: str, stations = None, roti_file = None, time_points = None):
+    def process(self, map_path: str, stations = None, roti_file = None, time_points = None):
         """
         Main function to process the file.
         
-        :param file_path: str, path to the HDF5 file with points.
+        :param map_path: str, path to the HDF5 file with points.
         """ 
-        self.file_name = os.path.basename(file_path)
+        self.file_name = os.path.basename(map_path)
         result = {}
-        with h5.File(file_path, 'r') as file:
+        with h5.File(map_path, 'r') as file:
             
             data = file["data"]
             if time_points is None:
