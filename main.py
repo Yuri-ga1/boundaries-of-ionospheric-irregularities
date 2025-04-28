@@ -140,12 +140,17 @@ if __name__ == "__main__":
         segment_lon_step=SEGMENT_LON_STEP,
         segment_lat_step=SEGMENT_LAT_STEP,
         boundary_condition=BOUNDARY_CONDITION,
-        save_to_file=False
+        save_to_file=True
     )
     
     for rinex_file in os.listdir(FILES_PATH):
         if rinex_file.endswith('.h5') and os.path.isfile(os.path.join(FILES_PATH, rinex_file)):
             try:
+                full_rinex_path = os.path.join(FILES_PATH, rinex_file)
+                with RinexProcessor(full_rinex_path) as processor:
+                    processor.process()
+                    satellite_data = processor.data
+                    flybys = processor.flybys
                 date_str = rinex_file.split('.')[0]
                 date_obj = dt.strptime(date_str, '%Y-%m-%d')
                 
@@ -156,21 +161,27 @@ if __name__ == "__main__":
                 for meshing_file in os.listdir(MESHING_PATH):
                     if search_pattern in meshing_file and meshing_file.endswith('.h5'):
                         full_meshing_path = os.path.join(MESHING_PATH, meshing_file)
-                        full_rinex_path = os.path.join(FILES_PATH, rinex_file)
-                        logger.debug(f"Для файла {rinex_file} найден meshing файл: {full_meshing_path}")
+                        # full_rinex_path = os.path.join(FILES_PATH, rinex_file)
+                        logger.debug(f"For file {rinex_file} a meshing file was found: {full_meshing_path}")
 
-                        process_flyby(
-                            full_meshing_path=full_meshing_path,
-                            full_rinex_path=full_rinex_path,
-                            date_str=date_str
+                        boundary = data_processor.process(
+                            file_path=full_meshing_path,
+                            roti_file=full_rinex_path,
+                            # stations=['sask', 'picl', 'dubo', 'gilc']
+                            stations=['picl']
                         )
+                        # process_flyby(
+                        #     full_meshing_path=full_meshing_path,
+                        #     full_rinex_path=full_rinex_path,
+                        #     date_str=date_str
+                        # )
 
                         break
                 else:
-                    logger.warning(f"Не найден meshing файл для паттерна: {search_pattern}")
+                    logger.warning(f"No meshing file found for pattern: {search_pattern}")
                     
             except ValueError:
-                logger.error(f"Некорректный формат имени файла: {rinex_file}")
+                logger.error(f"Incorrect file name format: {rinex_file}")
 
     
         
