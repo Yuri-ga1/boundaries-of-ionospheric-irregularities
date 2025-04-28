@@ -14,6 +14,7 @@ HM = 300
 
 MIN_CLUSTER_SIZE = 100
 
+TIME_GAP_LIMIT = 15 #minutes
 import os
 FILES_PATH = 'files'
 MESHING_PATH =  os.path.join(FILES_PATH, "meshing")

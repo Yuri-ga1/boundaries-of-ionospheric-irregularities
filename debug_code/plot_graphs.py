@@ -15,7 +15,7 @@ import os
 from shapely.geometry import Polygon, MultiPolygon
 
 from debug_code.calc_sat_trajectory import Trajectory
-from config import FRAME_GRAPHS_PATH, LAT_CONDITION, LON_CONDITION
+from config import FRAME_GRAPHS_PATH, LAT_CONDITION, LON_CONDITION, TIME_GAP_LIMIT
 
 def remove_traj_lines(trajectory_elements):
     if trajectory_elements:
@@ -109,8 +109,13 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
                 ax.plot(x, y, f'{color}--', label=label)
     
     if single_cluster_polygon:
-        x, y = single_cluster_polygon.exterior.xy
-        ax.fill(x, y, 'purple', alpha=0.5, label="Polygon area")
+        if isinstance(single_cluster_polygon, MultiPolygon):
+            for polygon in single_cluster_polygon.geoms:
+                x, y = polygon.exterior.xy
+                ax.fill(x, y, 'purple', alpha=0.5, label="Polygon area")
+        else:
+            x, y = single_cluster_polygon.exterior.xy
+            ax.fill(x, y, 'purple', alpha=0.5, label="Polygon area")
     
     if intersection and not intersection.is_empty:
         for poly in ([intersection] if isinstance(intersection, Polygon) else intersection.geoms):
@@ -348,7 +353,7 @@ def clean_events(event_times, event_types):
 
         j = i + 1
         future = []
-        while j < len(dedup_times) and dedup_times[j] <= current_time + timedelta(minutes=15):
+        while j < len(dedup_times) and dedup_times[j] <= current_time + timedelta(minutes=TIME_GAP_LIMIT):
             future.append((dedup_times[j], dedup_types[j]))
             j += 1
 
@@ -364,7 +369,7 @@ def clean_events(event_times, event_types):
                 m = k + 1
                 count = 0
 
-                while m < len(dedup_times) and dedup_times[m] <= look_time + timedelta(minutes=15):
+                while m < len(dedup_times) and dedup_times[m] <= look_time + timedelta(minutes=TIME_GAP_LIMIT):
                     count += 1
                     m += 1
 
@@ -538,7 +543,8 @@ def plot_combined_graphs(
             stations = h5file.keys()
 
         for station in stations:
-            for satellite in h5file[station]:
+            # for satellite in h5file[station]:
+            for satellite in ["G01"]:
                 dynamic_ax.clear()
 
                 plot_roti_dynamics(h5file[station], satellite, time_point=time_point, ax=dynamic_ax)
