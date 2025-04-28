@@ -47,6 +47,9 @@ def compute_polygons(boundary_clusters, time_point):
     :param time_point: str, timestamp for the data.
     :return: tuple (polygons, intersection, single_cluster_polygon)
     """
+    if boundary_clusters is None:
+        return None, None, None
+    
     entry = boundary_clusters.get(time_point)
     if not entry:
         return None, None, None
@@ -93,8 +96,10 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
     polygons, intersection, single_cluster_polygon = compute_polygons(boundary_clusters, time_point)
     
     if polygons is None:
-        ax.text(0.5, 0.5, "No Data for Polygon", fontsize=12, color='red', alpha=0.7, ha='center', va='center', 
-                rotation=45, transform=ax.transAxes)
+        if boundary_clusters is not None:
+            plot_clusters(boundary_clusters, time_point)
+        # ax.text(0.5, 0.5, "No Data for Polygon", fontsize=12, color='red', alpha=0.7, ha='center', va='center', 
+        #         rotation=45, transform=ax.transAxes)
         if created_fig:
             plt.show()
         return fig, ax
@@ -197,9 +202,9 @@ def plot_sliding_window(
     cmap = plt.get_cmap(cmap)
     norm = plt.Normalize(0, 0.1)
     
-    lon = np.array([entry['lon'] for entry in sliding_windows])
-    lat = np.array([entry['lat'] for entry in sliding_windows])
-    vals = np.array([entry['vals'] for entry in sliding_windows])
+    lon = np.array(sliding_windows['lon'])
+    lat = np.array(sliding_windows['lat'])
+    vals = np.array(sliding_windows['vals'])
     
     scatter_sliding = ax.scatter(lon, lat, c=vals, cmap=cmap, norm=norm)
     ax.set_xlabel("Longitude")
@@ -400,7 +405,7 @@ def clean_events(event_times, event_types):
 
     return final_times, final_types
 
-def plot_flyby(roti, ts, station, satellite, crossing_events=None, ax=None):
+def plot_flyby(roti, ts, station, satellite, cleaned_times, cleaned_types, ax=None):
     created_fig = False
     if ax is None:
         fig, ax = plt.subplots()
@@ -412,17 +417,14 @@ def plot_flyby(roti, ts, station, satellite, crossing_events=None, ax=None):
     ax.scatter(times, roti)
 
     ax.set_xlim(min(times), max(times))
-
     ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
     ax.tick_params(axis='x', rotation=45)
 
     ax.yaxis.set_major_formatter(ticker.FormatStrFormatter('%.3f'))
-
     y_max = max(roti)
     y_lim = ((y_max // 0.5) + 1) * 0.5
     ax.set_ylim(0, y_lim)
-
     ax.yaxis.set_major_locator(ticker.MultipleLocator(0.5))
     ax.yaxis.set_minor_locator(ticker.MultipleLocator(0.1))
     ax.grid(True, which='major', linewidth=1, linestyle='-', alpha=0.7)
@@ -431,58 +433,47 @@ def plot_flyby(roti, ts, station, satellite, crossing_events=None, ax=None):
     ax.set_xlabel("Time")
     ax.set_ylabel("ROTI")
 
-    if crossing_events:
-        events = sorted(crossing_events, key=lambda e: dt.strptime(e['time'], "%Y-%m-%d %H:%M:%S.%f"))
-        event_times = [dt.strptime(e['time'], "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=datetime.UTC) for e in events]
-        event_types = [e['event'] for e in events]
+    last_time = times[0]
+    for i in range(len(cleaned_times)):
+        current_time = cleaned_times[i]
+        current_event = cleaned_types[i]
 
-        cleaned_times, cleaned_types = clean_events(event_times, event_types)
-
-        if cleaned_times:
-            metadata = {
-                'final_times': [t.isoformat() for t in cleaned_times],
-                'final_types': cleaned_types
-            }
-
-        last_time = times[0]
-        for i in range(len(cleaned_times)):
-            current_time = cleaned_times[i]
-            current_event = cleaned_types[i]
-
-            color = {
-                "entered": "green",
-                "exited": "red",
-                "noise": "yellow"
-            }.get(current_event, "gray")
-
-            ax.axvspan(last_time, current_time, color=color, alpha=0.3)
-            last_time = current_time
-
-        final_color = {
-            "entered": "red",
-            "exited": "green",
+        color = {
+            "entered": "green",
+            "exited": "red",
             "noise": "yellow"
-        }.get(cleaned_types[-1], "gray")
+        }.get(current_event, "gray")
 
-        ax.axvspan(last_time, times[-1], color=final_color, alpha=0.3)
+        ax.axvspan(last_time, current_time, color=color, alpha=0.3)
+        last_time = current_time
 
-        legend_elements = [
-            Patch(facecolor='red', alpha=0.3, label='Inside'),
-            # Patch(facecolor='yellow', alpha=0.3, label='Шум'),
-            Patch(facecolor='green', alpha=0.3, label='Outside')
-        ]
-        ax.legend(handles=legend_elements, loc='upper right')
+    final_color = {
+        "entered": "red",
+        "exited": "green",
+        "noise": "yellow"
+    }.get(cleaned_types[-1], "gray")
+
+    ax.axvspan(last_time, times[-1], color=final_color, alpha=0.3)
+
+    legend_elements = [
+        Patch(facecolor='red', alpha=0.3, label='Inside'),
+        Patch(facecolor='green', alpha=0.3, label='Outside')
+    ]
+    ax.legend(handles=legend_elements, loc='upper right')
 
     ax.set_title(f"Flyby for {station}_{satellite}")
+    
     if created_fig:
         plt.show()
-        return metadata
-    else:
-        return fig, ax, metadata
+    return fig, ax
+
 
 def plot_combined_graphs(
-    map_points, sliding_windows, boundary_data, boundary_condition,
-    time_point, boundary_clusters, roti_file, stations = None, save_to_file=False
+    map_points, sliding_windows,
+    boundary_data, boundary_condition,
+    time_point, boundary_clusters,
+    flyby_file, roti_file,
+    stations = None, save_to_file=False
 ):
     """
     Generates a composite visualization combining multiple plots.
@@ -538,22 +529,44 @@ def plot_combined_graphs(
     )
     
     # 4. ROTI dynamics
-    with h5.File(roti_file, 'r') as h5file:
+    with h5.File(roti_file, 'r') as roti_h5file, h5.File(flyby_file, 'r') as flyby_h5file:
         if stations is None:
-            stations = h5file.keys()
+            stations = roti_h5file.keys()
 
         for station in stations:
-            # for satellite in h5file[station]:
+            # for satellite in roti_h5file[station].keys():
             for satellite in ["G01"]:
                 dynamic_ax.clear()
 
-                plot_roti_dynamics(h5file[station], satellite, time_point=time_point, ax=dynamic_ax)
+                if station not in flyby_h5file:
+                    break
+                
+                if satellite not in flyby_h5file[station]:
+                    continue
+                
+                flyby_group = flyby_h5file[station][satellite]
+                
+                flyby_roti = flyby_group['roti'][:]
+                flyby_ts = flyby_group['timestamps'][:]
+                cleaned_times = [dt.fromisoformat(t) for t in flyby_group.attrs['times']]
+                cleaned_types = flyby_group.attrs['types']
+                
+                plot_flyby(
+                    roti=flyby_roti,
+                    ts=flyby_ts,
+                    station=station,
+                    satellite=satellite,
+                    cleaned_times=cleaned_times,
+                    cleaned_types=cleaned_types,
+                    ax=dynamic_ax
+                )
+                
                 trajectory_elements = add_sat_traj(
-                    station_lat=h5file[station].attrs['lat'],
-                    station_lon=h5file[station].attrs['lon'],
-                    sat_azs=h5file[station][satellite]['azimuth'][:],
-                    sat_els=h5file[station][satellite]['elevation'][:],
-                    sat_times=h5file[station][satellite]['timestamp'][:],
+                    station_lat=roti_h5file[station].attrs['lat'],
+                    station_lon=roti_h5file[station].attrs['lon'],
+                    sat_azs=roti_h5file[station][satellite]['azimuth'][:],
+                    sat_els=roti_h5file[station][satellite]['elevation'][:],
+                    sat_times=roti_h5file[station][satellite]['timestamp'][:],
                     time_point=time_point,
                     ax_list=[map_ax, sl_win_ax, poly_ax]
                 )

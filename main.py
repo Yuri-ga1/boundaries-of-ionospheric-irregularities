@@ -30,7 +30,7 @@ def check_satellite_crossing(borders, satellites, threshold=10800):
 
     for i in range(len(time_keys) - 1):
         t1, t2 = time_keys[i], time_keys[i + 1]
-        if not borders[t1] or not borders[t2]:
+        if borders[t1].size == 0 or borders[t2].size == 0:
             continue
 
         _, intersection1, single_cluster1 = compute_polygons(borders, t1)
@@ -75,43 +75,49 @@ def check_satellite_crossing(borders, satellites, threshold=10800):
 def process_flyby(boundary, satellite_data, flybys, date_str):
     crossings = check_satellite_crossing(boundary, satellite_data)
     stations = flybys.keys()
-    all_metadata = {}
 
-    for st in stations:
-        satellites = flybys[st].keys()
-        for sat in satellites:
-            flyby_keys = list(flybys[st][sat].keys())
-            for fb_index, fb_key in enumerate(flyby_keys):
-                logger.info(f"Process {st}_{sat}_{fb_key}")
+    os.makedirs(FLYBYS_PATH, exist_ok=True)
+    h5_path = os.path.join(FLYBYS_PATH, f"{date_str}.h5")
 
-                crossing_events = crossings.get(st, {}).get(sat, [])
+    with h5.File(h5_path, 'w') as h5file:
+        for st in stations:
+            satellites = flybys[st].keys()
+            for sat in satellites:
+                for fb_index, fb_key in enumerate(flybys[st][sat].keys()):
+                    logger.info(f"Process {st}_{sat}_{fb_key}")
 
-                if fb_index < len(crossing_events):
-                    events = sorted(crossing_events[fb_index], key=lambda e: dt.strptime(e['time'], "%Y-%m-%d %H:%M:%S.%f"))
-                    event_times = [dt.strptime(e['time'], "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=datetime.UTC) for e in events]
-                    event_types = [e['event'] for e in events]
+                    crossing_events = crossings.get(st, {}).get(sat, [])
 
-                    cleaned_times, cleaned_types = clean_events(event_times, event_types)
+                    if fb_index < len(crossing_events):
+                        events = sorted(
+                            crossing_events[fb_index],
+                            key=lambda e: dt.strptime(e['time'], "%Y-%m-%d %H:%M:%S.%f")
+                        )
+                        event_times = [
+                            dt.strptime(e['time'], "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=datetime.UTC)
+                            for e in events
+                        ]
+                        event_types = [e['event'] for e in events]
 
-                    metadata = {
-                        'final_times': [t.isoformat() for t in cleaned_times],
-                        'final_types': cleaned_types
-                    }
+                        cleaned_times, cleaned_types = clean_events(event_times, event_types)
 
-                    relative_path = os.path.join(date_str, st, f"{sat}_flyby_{fb_index}.png")
-                    all_metadata[relative_path] = metadata
-                else:
-                    logger.warning(f'Break {st}_{sat}_{fb_key}')
-                    break
+                        group_path = f"{st}/{sat}/flyby_{fb_index}"
+                        flyby_group = h5file.create_group(group_path)
 
-    metadata_save_dir = os.path.join(FLYBYS_GRAPHS_PATH, date_str)
-    os.makedirs(metadata_save_dir, exist_ok=True)
-    metadata_path = os.path.join(metadata_save_dir, 'metadata.json')
+                        # Сохраняем атрибуты times и types
+                        flyby_group.attrs['times'] = [t.isoformat() for t in cleaned_times]
+                        flyby_group.attrs['types'] = cleaned_types
 
-    with open(metadata_path, 'w') as f:
-        json.dump(all_metadata, f, indent=4, ensure_ascii=False)
+                        # Сохраняем roti и timestamps
+                        flyby_data = flybys[st][sat][fb_key]
+                        flyby_group.create_dataset('roti', data=flyby_data['roti'])
+                        flyby_group.create_dataset('timestamps', data=flyby_data['timestamps'])
 
-    logger.info(f"Metadata saved to {metadata_path}")
+                    else:
+                        logger.warning(f'Flyby index is lower than the crossing events {st}_{sat}_{fb_key}')
+                        break
+
+    logger.info(f"Flyby HDF5 saved to {h5_path}")
 
 if __name__ == "__main__":
     np.set_printoptions(threshold=np.inf)
@@ -121,46 +127,90 @@ if __name__ == "__main__":
         lat_condition=LAT_CONDITION,
         segment_lon_step=SEGMENT_LON_STEP,
         segment_lat_step=SEGMENT_LAT_STEP,
-        boundary_condition=BOUNDARY_CONDITION,
-        save_to_file=True
+        boundary_condition=BOUNDARY_CONDITION
     )
     
     for rinex_file in os.listdir(FILES_PATH):
         if rinex_file.endswith('.h5') and os.path.isfile(os.path.join(FILES_PATH, rinex_file)):
             try:
-                full_rinex_path = os.path.join(FILES_PATH, rinex_file)
                 date_str = rinex_file.split('.')[0]
-                date_obj = dt.strptime(date_str, '%Y-%m-%d')
-                
-                year = date_obj.year
-                doy = date_obj.timetuple().tm_yday
-                map_name = f'roti_{year}_{doy}.h5'
+                h5_filename = f'{date_str}.h5'
+                full_rinex_path = os.path.join(FILES_PATH, rinex_file)
                 
                 with RinexProcessor(full_rinex_path) as processor:
-                    processor.process(map_name)
+                    processor.process(h5_filename)
                     satellite_data = processor.data
                     flybys = processor.flybys
                 
-                meshing_path = os.path.join(MESHING_PATH, map_name)
-                if os.path.isfile(meshing_path):
-                    # full_rinex_path = os.path.join(FILES_PATH, rinex_file)
-                    logger.debug(f"For file {rinex_file} a meshing file was found: {meshing_path}")
+                full_map_path = os.path.join(MAP_PATH, h5_filename)
+                if os.path.isfile(full_map_path):
+                    logger.debug(f"For file {rinex_file} a meshing file was found: {full_map_path}")
                     
-                    boundary = map_processor.process(
-                        map_path=meshing_path,
-                        roti_file=full_rinex_path,
-                        # stations=['sask', 'picl', 'dubo', 'gilc']
-                        stations=['picl']
+                    boundary_output_path = os.path.join(BOUNDARY_PATH, h5_filename)
+                    full_flyby_path = os.path.join(FLYBYS_PATH, h5_filename)
+                    
+                    map_processor.process(
+                        map_path=full_map_path,
+                        output_path=boundary_output_path
                     )
-                    # process_flyby(
-                    #     full_meshing_path=full_meshing_path,
-                    #     full_rinex_path=full_rinex_path,
-                    #     date_str=date_str
-                    # )
+                    
+                    # Теперь достаем данные для графика
+                    with h5.File(boundary_output_path, 'r') as boundary_file:
+                        for time_point in boundary_file.keys():
+                            time_grp = boundary_file[time_point]
+
+                            # Загружаем нужные промежуточные результаты
+                            filtered_points = {
+                                'lon': time_grp['filtered_points']['lon'][()],
+                                'lat': time_grp['filtered_points']['lat'][()],
+                                'vals': time_grp['filtered_points']['vals'][()],
+                            }
+                            sliding_windows = {
+                                'lon': time_grp['sliding_windows']['lon'][()],
+                                'lat': time_grp['sliding_windows']['lat'][()],
+                                'vals': time_grp['sliding_windows']['vals'][()],
+                            }
+                            boundary = {
+                                'lon': time_grp['boundary']['lon'][()],
+                                'lat': time_grp['boundary']['lat'][()],
+                            }
+
+                            if "boundary_clusters" in time_grp:
+                                boundary_clusters = {'relation': time_grp['boundary_clusters'].attrs['relation']}
+                                for cluster_key in time_grp['boundary_clusters']:
+                                    cluster_grp = time_grp['boundary_clusters'][cluster_key]
+                                    boundary_clusters[cluster_key] = np.column_stack((
+                                        cluster_grp['lon'][()],
+                                        cluster_grp['lat'][()]
+                                    )).tolist()
+                            else:
+                                boundary_clusters = None
+                                
+                                
+                            process_flyby(
+                                boundary=boundary,
+                                satellite_data=satellite_data,
+                                flybys=flybys,
+                                date_str=date_str
+                            )
+
+                            # Теперь можно вызвать plot
+                            plot_combined_graphs(
+                                map_points=filtered_points,
+                                sliding_windows=sliding_windows,
+                                flyby_file=full_flyby_path,
+                                boundary_data=boundary,
+                                boundary_condition=BOUNDARY_CONDITION,
+                                time_point=time_point,
+                                boundary_clusters=boundary_clusters,
+                                roti_file=full_rinex_path,
+                                stations=['picl'],
+                                save_to_file=True
+                            )
 
                     break
                 else:
-                    logger.warning(f"Meshing file not found: {meshing_path}")
+                    logger.warning(f"Meshing file not found: {full_map_path}")
                     
             except ValueError:
                 logger.error(f"Incorrect file name format: {rinex_file}")

@@ -12,8 +12,6 @@ from scipy.interpolate import griddata
 from config import *
 from debug_code.plot_graphs import *
 
-# TODO убедиться в точности последовательности точек
-
 class MapProcessor:
     def __init__(
         self,
@@ -21,8 +19,7 @@ class MapProcessor:
         lat_condition: float,
         segment_lon_step: float,
         segment_lat_step: float,
-        boundary_condition: float,
-        save_to_file : bool = False
+        boundary_condition: float
     ):
         """
         Initializes the MapProcessor object.
@@ -31,14 +28,12 @@ class MapProcessor:
         :param lat_condition: float, latitude condition for pole proximity.
         :param segment_lon_step: float, sliding window step in longitude.
         :param segment_lat_step: float, sliding window step in latitude.
-        :param save_to_file : bool, whether to save graphs to file or show them.
         """
         self.lon_condition = lon_condition
         self.lat_condition = lat_condition
         self.segment_lon_step = segment_lon_step
         self.segment_lat_step = segment_lat_step
         self.boundary_condition = boundary_condition
-        self.save_to_file  = save_to_file 
         
         self.file_name = None
             
@@ -243,50 +238,81 @@ class MapProcessor:
             }
 
 
-    def process(self, map_path: str, stations = None, roti_file = None, time_points = None):
+    def process(self, map_path: str, output_path: str, time_points=None):
         """
-        Main function to process the file.
-        
-        :param map_path: str, path to the HDF5 file with points.
-        """ 
+        Processes the map file and saves intermediate and final results to a new HDF5 file.
+
+        :param map_path: str, path to the input HDF5 file.
+        :param output_path: str, path to the output HDF5 file.
+        :param time_points: list or None, specific time points to process.
+        """
         self.file_name = os.path.basename(map_path)
-        result = {}
-        with h5.File(map_path, 'r') as file:
+        
+        if os.path.exists(output_path):
+            logger.info(f"Boundary file is exist: {output_path}")
+            return
             
+        with h5.File(map_path, 'r') as file, h5.File(output_path, 'w') as out_file:
+
             data = file["data"]
             if time_points is None:
                 time_points = data.keys()
-                
+
             for time_point in time_points:
                 logger.info(f"Processing {time_point} in {self.file_name}.")
+
                 points_group = data[time_point]
+
+                # 1. raw points
+                lon = points_group['lon'][()]
+                lat = points_group['lat'][()]
+                vals = points_group['vals'][()]
                 
+                group = out_file.create_group(str(time_point))
+                points_grp = group.create_group("points")
+                points_grp.create_dataset("lon", data=lon)
+                points_grp.create_dataset("lat", data=lat)
+                points_grp.create_dataset("vals", data=vals)
+
+                # 2. filtered_points
                 filtered_points = self.__filter_points(points_group)
-                
+                filtered_grp = group.create_group("filtered_points")
+                filtered_grp.create_dataset("lon", data=filtered_points["lon"])
+                filtered_grp.create_dataset("lat", data=filtered_points["lat"])
+                filtered_grp.create_dataset("vals", data=filtered_points["vals"])
+
+                # 3. sliding_windows
                 window_heigth = WINDOW_AREA / WINDOW_WIDTH
-                
                 sliding_windows = self.__apply_sliding_window(
                     filtered_points=filtered_points,
                     window_size=(window_heigth, WINDOW_WIDTH),
                 )
-                
+
+                sliding_grp = group.create_group("sliding_windows")
+                sliding_grp.create_dataset("lon", data=[p["lon"] for p in sliding_windows])
+                sliding_grp.create_dataset("lat", data=[p["lat"] for p in sliding_windows])
+                sliding_grp.create_dataset("vals", data=[p["vals"] for p in sliding_windows])
+
+                # 4. boundary_data
                 boundary_data = self.__get_boundary_data(sliding_windows)
-                
-                result[time_point] = self.__create_boundary_clusters(
+                boundary_grp = group.create_group("boundary")
+                boundary_grp.create_dataset("lon", data=boundary_data["lon"])
+                boundary_grp.create_dataset("lat", data=boundary_data["lat"])
+
+                # 5. boundary_clusters
+                boundary_clusters = self.__create_boundary_clusters(
                     lat_list=boundary_data['lat'],
                     lon_list=boundary_data['lon']
                 )
-                
-                plot_combined_graphs(
-                    map_points=filtered_points,
-                    sliding_windows=sliding_windows,
-                    boundary_data=boundary_data,
-                    boundary_condition=BOUNDARY_CONDITION,
-                    time_point=time_point,
-                    boundary_clusters=result,
-                    roti_file=roti_file,
-                    stations=stations,
-                    save_to_file=self.save_to_file
-                )
+
+                if boundary_clusters is not None:
+                    clusters_grp = group.create_group("boundary_clusters")
+                    clusters_grp.attrs["relation"] = boundary_clusters["relation"]
+                    for key, cluster_points in boundary_clusters.items():
+                        if key == "relation":
+                            continue
+                        cluster_grp = clusters_grp.create_group(key)
+                        cluster_points = np.array(cluster_points)
+                        cluster_grp.create_dataset("lon", data=cluster_points[:, 0])
+                        cluster_grp.create_dataset("lat", data=cluster_points[:, 1])
                     
-        return result

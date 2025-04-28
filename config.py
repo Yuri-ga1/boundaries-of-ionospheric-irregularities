@@ -17,10 +17,14 @@ MIN_CLUSTER_SIZE = 100
 TIME_GAP_LIMIT = 15 #minutes
 import os
 FILES_PATH = 'files'
-MESHING_PATH =  os.path.join(FILES_PATH, "meshing")
+MAP_PATH =  os.path.join(FILES_PATH, "map")
+BOUNDARY_PATH = os.path.join(FILES_PATH, 'boundary')
+FLYBYS_PATH = os.path.join(FILES_PATH, "flybys")
+os.makedirs(MAP_PATH, exist_ok=True)
+os.makedirs(BOUNDARY_PATH, exist_ok=True)
+os.makedirs(FLYBYS_PATH, exist_ok=True)
 
 FRAME_GRAPHS_PATH = os.path.join('graphs', 'combined')
-FLYBYS_GRAPHS_PATH = os.path.join("graphs", "flybys")
 SAVE_VIDEO_PATH = os.path.join('graphs', 'video')
 
 from custom_logger import Logger

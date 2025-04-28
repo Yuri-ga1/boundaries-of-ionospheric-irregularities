@@ -49,8 +49,8 @@ class RinexProcessor:
             flyby_ts = ts[indices]
 
             self.flybys[station_name][satellite_name][f'flyby{pass_num}'] = {
-                'roti': flyby_roti.tolist(),
-                'timestamps': flyby_ts.tolist(),
+                'roti': flyby_roti,
+                'timestamps': flyby_ts,
             }
             
     def __process_satellite(self, station_name, satellite_name):
@@ -107,7 +107,7 @@ class RinexProcessor:
             )
         return d
     
-    def create_h5(self, output_path):
+    def __create_map(self, output_path):
         with h5.File(output_path, 'w') as f:
             data_group = f.create_group('data')
 
@@ -139,7 +139,13 @@ class RinexProcessor:
                 ts_group.create_dataset('lon', data=lons)
                 ts_group.create_dataset('vals', data=vals)
         
-    def process(self):
+    def process(self, map_name):
+        map_path = os.path.join(MAP_PATH, map_name)
+        
+        if os.path.exists(map_path):
+            logger.info(f"Map file is exist: {map_path}")
+            return
+        
         processed_data  = {}
         for station in self.file:
             self.__save_station_coords(station)
@@ -168,4 +174,5 @@ class RinexProcessor:
                     processed_data[ts][st_sat] = entry
                     
         self.data = self.sort_dict(processed_data)
-        self.create_h5('files\meshing\\roti_2019_134_-90_90_N_-180_180_E_ec78.h5')
+        map_path = os.path.join(MAP_PATH, map_name)
+        self.__create_map(map_path)
