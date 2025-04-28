@@ -106,6 +106,38 @@ class RinexProcessor:
                 sorted((key, self.sort_dict(value)) for key, value in d.items())
             )
         return d
+    
+    def create_h5(self, output_path):
+        with h5.File(output_path, 'w') as f:
+            data_group = f.create_group('data')
+
+            for ts, satellites in self.data.items():
+                lats = []
+                lons = []
+                vals = []
+                
+                for sat_data in satellites.values():
+                    lats.append(sat_data['lat'])
+                    lons.append(sat_data['lon'])
+                    vals.append(sat_data['vals'])
+
+                # Склеиваем все данные
+                lats = np.array(lats)
+                lons = np.array(lons)
+                vals = np.array(vals)
+
+                if lats.ndim > 1:
+                    lats = lats.flatten()
+                if lons.ndim > 1:
+                    lons = lons.flatten()
+                if vals.ndim > 1:
+                    vals = vals.flatten()
+
+                # Создаем группу для текущего времени
+                ts_group = data_group.create_group(ts)
+                ts_group.create_dataset('lat', data=lats)
+                ts_group.create_dataset('lon', data=lons)
+                ts_group.create_dataset('vals', data=vals)
         
     def process(self):
         processed_data  = {}
@@ -125,7 +157,7 @@ class RinexProcessor:
                     ts = dt.fromtimestamp(float(result['timestamp'][i]), datetime.UTC).strftime('%Y-%m-%d %H:%M:%S.%f')
                     
                     entry = {
-                        'vals': result['vals'][i],
+                        'vals': result['vals'][i]/3,
                         'lat': result['lat'][i],
                         'lon': result['lon'][i]
                     }
@@ -136,3 +168,4 @@ class RinexProcessor:
                     processed_data[ts][st_sat] = entry
                     
         self.data = self.sort_dict(processed_data)
+        self.create_h5('files\meshing\\roti_2019_134_-90_90_N_-180_180_E_ec78.h5')
