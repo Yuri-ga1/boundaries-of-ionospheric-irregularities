@@ -51,7 +51,10 @@ def compute_polygons(boundary_clusters, time_point):
         return None, None, None
     
     entry = boundary_clusters.get(time_point)
-    if not entry:
+    if entry is None:
+        return None, None, None
+    
+    if len(entry) == 0:
         return None, None, None
     
     if entry.get('relation') == "single-cluster":
@@ -96,10 +99,8 @@ def plot_polygon(boundary_clusters, time_point, ax=None):
     polygons, intersection, single_cluster_polygon = compute_polygons(boundary_clusters, time_point)
     
     if polygons is None:
-        if boundary_clusters is not None:
-            plot_clusters(boundary_clusters, time_point)
-        # ax.text(0.5, 0.5, "No Data for Polygon", fontsize=12, color='red', alpha=0.7, ha='center', va='center', 
-        #         rotation=45, transform=ax.transAxes)
+        ax.text(0.5, 0.5, "No Data for Polygon", fontsize=12, color='red', alpha=0.7, ha='center', va='center', 
+                rotation=45, transform=ax.transAxes)
         if created_fig:
             plt.show()
         return fig, ax
@@ -211,7 +212,7 @@ def plot_sliding_window(
     ax.set_ylabel("Latitude")
     fig.colorbar(scatter_sliding, ax=ax, label='ROTI')    
     
-    if boundary_data['lon'] and boundary_data['lat']:
+    if boundary_data['lon'].size > 0 and boundary_data['lat'].size > 0:
         ax.scatter(
             boundary_data['lon'],
             boundary_data['lat'], 
@@ -405,7 +406,7 @@ def clean_events(event_times, event_types):
 
     return final_times, final_types
 
-def plot_flyby(roti, ts, station, satellite, cleaned_times, cleaned_types, ax=None):
+def plot_flyby(roti, ts, station, satellite, cleaned_times, cleaned_types, time_point=None, ax=None):
     created_fig = False
     if ax is None:
         fig, ax = plt.subplots()
@@ -454,6 +455,14 @@ def plot_flyby(roti, ts, station, satellite, cleaned_times, cleaned_types, ax=No
     }.get(cleaned_types[-1], "gray")
 
     ax.axvspan(last_time, times[-1], color=final_color, alpha=0.3)
+
+    # if time_point is not None:
+    #     try:
+    #         time_dt = dt.strptime(time_point, "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=datetime.UTC)
+    #     except ValueError:
+    #         time_dt = dt.strptime(time_point, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.UTC)
+            
+    #     ax.axvspan(time_dt, time_dt + timedelta(minutes=5), color='black', alpha=0.3, label="Time Point")
 
     legend_elements = [
         Patch(facecolor='red', alpha=0.3, label='Inside'),
@@ -544,53 +553,54 @@ def plot_combined_graphs(
                 if satellite not in flyby_h5file[station]:
                     continue
                 
-                flyby_group = flyby_h5file[station][satellite]
-                
-                flyby_roti = flyby_group['roti'][:]
-                flyby_ts = flyby_group['timestamps'][:]
-                cleaned_times = [dt.fromisoformat(t) for t in flyby_group.attrs['times']]
-                cleaned_types = flyby_group.attrs['types']
-                
-                plot_flyby(
-                    roti=flyby_roti,
-                    ts=flyby_ts,
-                    station=station,
-                    satellite=satellite,
-                    cleaned_times=cleaned_times,
-                    cleaned_types=cleaned_types,
-                    ax=dynamic_ax
-                )
-                
-                trajectory_elements = add_sat_traj(
-                    station_lat=roti_h5file[station].attrs['lat'],
-                    station_lon=roti_h5file[station].attrs['lon'],
-                    sat_azs=roti_h5file[station][satellite]['azimuth'][:],
-                    sat_els=roti_h5file[station][satellite]['elevation'][:],
-                    sat_times=roti_h5file[station][satellite]['timestamp'][:],
-                    time_point=time_point,
-                    ax_list=[map_ax, sl_win_ax, poly_ax]
-                )
+                flybys = flyby_h5file[station][satellite].keys()
+                for flyby_idx in flybys:
+                    flyby_group = flyby_h5file[station][satellite][flyby_idx]
+                    flyby_roti = flyby_group['roti'][:]
+                    flyby_ts = flyby_group['timestamps'][:]
+                    cleaned_times = [dt.fromisoformat(t) for t in flyby_group.attrs['times']]
+                    cleaned_types = flyby_group.attrs['types']
+                    
+                    plot_flyby(
+                        roti=flyby_roti,
+                        ts=flyby_ts,
+                        station=station,
+                        satellite=satellite,
+                        cleaned_times=cleaned_times,
+                        cleaned_types=cleaned_types,
+                        ax=dynamic_ax
+                    )
+                    
+                    trajectory_elements = add_sat_traj(
+                        station_lat=roti_h5file[station].attrs['lat'],
+                        station_lon=roti_h5file[station].attrs['lon'],
+                        sat_azs=roti_h5file[station][satellite]['azimuth'][:],
+                        sat_els=roti_h5file[station][satellite]['elevation'][:],
+                        sat_times=roti_h5file[station][satellite]['timestamp'][:],
+                        time_point=time_point,
+                        ax_list=[map_ax, sl_win_ax, poly_ax]
+                    )
 
-                fig.suptitle(f'Graphs for {station}_{satellite} at {time_point}')
-                fig.tight_layout()
-                
-                map_box = map_ax.get_position()
-                poly_box = poly_ax.get_position()
-                dynamic_box = dynamic_ax.get_position()
-                
-                poly_ax.set_position([poly_box.x0, poly_box.y0, map_box.width, poly_box.height])
-                dynamic_ax.set_position([dynamic_box.x0, dynamic_box.y0, map_box.width, dynamic_box.height])
+                    fig.suptitle(f'Graphs for {station}_{satellite} at {time_point}')
+                    fig.tight_layout()
+                    
+                    map_box = map_ax.get_position()
+                    poly_box = poly_ax.get_position()
+                    dynamic_box = dynamic_ax.get_position()
+                    
+                    poly_ax.set_position([poly_box.x0, poly_box.y0, map_box.width, poly_box.height])
+                    dynamic_ax.set_position([dynamic_box.x0, dynamic_box.y0, map_box.width, dynamic_box.height])
 
-                if save_to_file:
-                    output_dir = os.path.join(FRAME_GRAPHS_PATH, station, satellite)
-                    os.makedirs(output_dir, exist_ok=True)
-                    filename = f"{time_point.replace(':', '_')}.png"
-                    plt.savefig(os.path.join(output_dir, filename))
-                    remove_traj_lines(trajectory_elements)
-                else:
-                    fig.canvas.draw()
-                    plt.pause(60)
-                    remove_traj_lines(trajectory_elements)
+                    if save_to_file:
+                        output_dir = os.path.join(FRAME_GRAPHS_PATH, station, satellite, flyby_idx)
+                        os.makedirs(output_dir, exist_ok=True)
+                        filename = f"{time_point.replace(':', '_')}.png"
+                        plt.savefig(os.path.join(output_dir, filename))
+                        remove_traj_lines(trajectory_elements)
+                    else:
+                        fig.canvas.draw()
+                        plt.pause(60)
+                        remove_traj_lines(trajectory_elements)
                     
 
     if not save_to_file:

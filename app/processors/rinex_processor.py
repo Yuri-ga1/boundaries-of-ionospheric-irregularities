@@ -34,7 +34,7 @@ class RinexProcessor:
         if lat >= 0 and -2.53073 <= lon <= -0.523599:
             self.stations_coords[station_name] = {'lat': lat, 'lon': lon}
             
-    def __process_flyby(self, station_name, satellite_name, roti, ts):
+    def __divide_by_flyby(self, station_name, satellite_name, roti, ts):
         time_diffs = np.diff(ts)
         pass_indices = np.where(time_diffs >= 1800)[0] + 1
         pass_splits = np.split(np.arange(len(ts)), pass_indices)
@@ -59,7 +59,7 @@ class RinexProcessor:
         els = self.file[station_name][satellite_name]['elevation'][:]
         ts = self.file[station_name][satellite_name]['timestamp'][:]
         
-        self.__process_flyby(station_name, satellite_name, roti, ts)
+        self.__divide_by_flyby(station_name, satellite_name, roti, ts)
         
         el_mask = (els >= np.radians(10))
         roti = roti[el_mask]
@@ -109,17 +109,19 @@ class RinexProcessor:
     
     def __create_map(self, output_path):
         with h5.File(output_path, 'w') as f:
+            processed_data_group = f.create_group('processed_data')
             data_group = f.create_group('data')
+            flybys_group = f.create_group('flybys')
 
-            for ts, satellites in self.data.items():
+            for ts, st_sat in self.data.items():
                 lats = []
                 lons = []
                 vals = []
                 
-                for sat_data in satellites.values():
-                    lats.append(sat_data['lat'])
-                    lons.append(sat_data['lon'])
-                    vals.append(sat_data['vals'])
+                for st_sat_data in st_sat.values():
+                    lats.append(st_sat_data['lat'])
+                    lons.append(st_sat_data['lon'])
+                    vals.append(st_sat_data['vals'])
 
                 # Склеиваем все данные
                 lats = np.array(lats)
@@ -138,12 +140,73 @@ class RinexProcessor:
                 ts_group.create_dataset('lat', data=lats)
                 ts_group.create_dataset('lon', data=lons)
                 ts_group.create_dataset('vals', data=vals)
-        
+
+
+                pd_ts_group = processed_data_group.create_group(ts)
+                # Для каждой станции создаем соответствующие наборы данных
+                for station_name, entry in st_sat.items():
+                    station_group = pd_ts_group.create_group(station_name)
+                    station_group.create_dataset('lat', data=entry['lat'])
+                    station_group.create_dataset('lon', data=entry['lon'])
+                    station_group.create_dataset('vals', data=entry['vals'])
+
+            for station_name, satellites in self.flybys.items():
+                station_group = flybys_group.create_group(station_name)
+                for satellite_name, flyby_data in satellites.items():
+                    satellite_group = station_group.create_group(satellite_name)
+                    for flyby_name, flyby_info in flyby_data.items():
+                        flyby_group = satellite_group.create_group(flyby_name)
+                        flyby_group.create_dataset('roti', data=flyby_info['roti'])
+                        flyby_group.create_dataset('timestamps', data=flyby_info['timestamps'])
+    
+    def __restor_data(self, map_path):
+        processed_data = {}
+        flybys_data = {}
+
+        with h5.File(map_path, 'r') as f:
+            # Восстановление данных карты
+            processed_data_group = f['processed_data']
+            for ts in processed_data_group:
+                ts_group = processed_data_group[ts]
+                entries = {}
+                for station_name in ts_group:
+                    station_group = ts_group[station_name]
+                    lat = station_group['lat'][()]
+                    lon = station_group['lon'][()]
+                    vals = station_group['vals'][()]
+                    entries[station_name] = {
+                        'lat': lat,
+                        'lon': lon,
+                        'vals': vals
+                    }
+                processed_data[ts] = entries
+
+            # Восстановление данных о пролётах
+            if 'flybys' in f:
+                flybys_group = f['flybys']
+                for station_name in flybys_group:
+                    station_group = flybys_group[station_name]
+                    flybys_data[station_name] = {}
+                    for satellite_name in station_group:
+                        satellite_group = station_group[satellite_name]
+                        flybys_data[station_name][satellite_name] = {}
+                        for flyby_name in satellite_group:
+                            flyby_group = satellite_group[flyby_name]
+                            flybys_data[station_name][satellite_name][flyby_name] = {
+                                'roti': flyby_group['roti'][()],
+                                'timestamps': flyby_group['timestamps'][()]
+                            }
+
+        self.data = self.sort_dict(processed_data)
+        self.flybys = self.sort_dict(flybys_data)
+
+
     def process(self, map_name):
         map_path = os.path.join(MAP_PATH, map_name)
         
         if os.path.exists(map_path):
-            logger.info(f"Map file is exist: {map_path}")
+            logger.info(f"Map file is exist: {map_path} restoring data")
+            self.__restor_data(map_path)
             return
         
         processed_data  = {}
