@@ -107,43 +107,32 @@ class RinexProcessor:
             )
         return d
     
-    def __create_map(self, output_path):
-        with h5.File(output_path, 'w') as f:
-            processed_data_group = f.create_group('processed_data')
-            data_group = f.create_group('data')
-            flybys_group = f.create_group('flybys')
+    def __create_h5(self, map_path, flyby_path):
+        with h5.File(map_path, 'w') as f_map, h5.File(flyby_path, 'w') as f_flyby:
+            data_group = f_map.create_group('data')
+            processed_data_group = f_flyby.create_group('processed_data')
+            flybys_group = f_flyby.create_group('flybys')
 
             for ts, st_sat in self.data.items():
                 lats = []
                 lons = []
                 vals = []
-                
+
                 for st_sat_data in st_sat.values():
                     lats.append(st_sat_data['lat'])
                     lons.append(st_sat_data['lon'])
                     vals.append(st_sat_data['vals'])
 
-                # Склеиваем все данные
-                lats = np.array(lats)
-                lons = np.array(lons)
-                vals = np.array(vals)
+                lats = np.array(lats).flatten()
+                lons = np.array(lons).flatten()
+                vals = np.array(vals).flatten()
 
-                if lats.ndim > 1:
-                    lats = lats.flatten()
-                if lons.ndim > 1:
-                    lons = lons.flatten()
-                if vals.ndim > 1:
-                    vals = vals.flatten()
-
-                # Создаем группу для текущего времени
                 ts_group = data_group.create_group(ts)
                 ts_group.create_dataset('lat', data=lats)
                 ts_group.create_dataset('lon', data=lons)
                 ts_group.create_dataset('vals', data=vals)
 
-
                 pd_ts_group = processed_data_group.create_group(ts)
-                # Для каждой станции создаем соответствующие наборы данных
                 for station_name, entry in st_sat.items():
                     station_group = pd_ts_group.create_group(station_name)
                     station_group.create_dataset('lat', data=entry['lat'])
@@ -159,12 +148,11 @@ class RinexProcessor:
                         flyby_group.create_dataset('roti', data=flyby_info['roti'])
                         flyby_group.create_dataset('timestamps', data=flyby_info['timestamps'])
     
-    def __restor_data(self, map_path):
+    def restor_data(self, flyby_path):
         processed_data = {}
         flybys_data = {}
 
-        with h5.File(map_path, 'r') as f:
-            # Восстановление данных карты
+        with h5.File(flyby_path, 'r') as f:
             processed_data_group = f['processed_data']
             for ts in processed_data_group:
                 ts_group = processed_data_group[ts]
@@ -181,7 +169,6 @@ class RinexProcessor:
                     }
                 processed_data[ts] = entries
 
-            # Восстановление данных о пролётах
             if 'flybys' in f:
                 flybys_group = f['flybys']
                 for station_name in flybys_group:
@@ -203,10 +190,10 @@ class RinexProcessor:
 
     def process(self, map_name):
         map_path = os.path.join(MAP_PATH, map_name)
+        flyby_path = os.path.join(FLYBYS_PATH, map_name)
         
         if os.path.exists(map_path):
-            logger.info(f"Map file is exist: {map_path} restoring data")
-            self.__restor_data(map_path)
+            logger.info(f"Map file is exist: {map_path}")
             return
         
         processed_data  = {}
@@ -237,5 +224,4 @@ class RinexProcessor:
                     processed_data[ts][st_sat] = entry
                     
         self.data = self.sort_dict(processed_data)
-        map_path = os.path.join(MAP_PATH, map_name)
-        self.__create_map(map_path)
+        self.__create_h5(map_path, flyby_path)

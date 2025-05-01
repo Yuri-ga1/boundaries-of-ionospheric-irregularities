@@ -15,14 +15,18 @@ HM = 300
 MIN_CLUSTER_SIZE = 100
 
 TIME_GAP_LIMIT = 15 #minutes
+
 import os
 FILES_PATH = 'files'
 MAP_PATH =  os.path.join(FILES_PATH, "map")
 BOUNDARY_PATH = os.path.join(FILES_PATH, 'boundary')
 FLYBYS_PATH = os.path.join(FILES_PATH, "flybys")
+PROCESSED_FLYBYS_PATH = os.path.join(FILES_PATH, "processed_flybys")
+
 os.makedirs(MAP_PATH, exist_ok=True)
 os.makedirs(BOUNDARY_PATH, exist_ok=True)
 os.makedirs(FLYBYS_PATH, exist_ok=True)
+os.makedirs(PROCESSED_FLYBYS_PATH, exist_ok=True)
 
 FRAME_GRAPHS_PATH = os.path.join('graphs', 'combined')
 SAVE_VIDEO_PATH = os.path.join('graphs', 'video')

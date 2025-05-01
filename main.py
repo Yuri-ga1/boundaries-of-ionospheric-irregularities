@@ -105,11 +105,7 @@ def check_satellite_crossing(borders, satellites, threshold=10800):
     return crossings
 
 def process_flyby(boundary, satellite_data, flybys, date_str):
-    h5_path = os.path.join(FLYBYS_PATH, f"{date_str}.h5")
-
-    if os.path.exists(h5_path):
-        logger.info(f"Flyby file is exist: {h5_path}")
-        return
+    h5_path = os.path.join(PROCESSED_FLYBYS_PATH, f"{date_str}.h5")
     
     crossings = check_satellite_crossing(boundary, satellite_data)
     stations = flybys.keys()
@@ -169,26 +165,26 @@ if __name__ == "__main__":
         if rinex_file.endswith('.h5') and os.path.isfile(os.path.join(FILES_PATH, rinex_file)):
             date_str = rinex_file.split('.')[0]
             h5_filename = f'{date_str}.h5'
+
             full_rinex_path = os.path.join(FILES_PATH, rinex_file)
-            
+            full_map_path = os.path.join(MAP_PATH, h5_filename)
+
             with RinexProcessor(full_rinex_path) as processor:
                 processor.process(h5_filename)
                 satellite_data = processor.data
                 flybys = processor.flybys
-            
-            full_map_path = os.path.join(MAP_PATH, h5_filename)
+
             if os.path.isfile(full_map_path):
                 logger.debug(f"For file {rinex_file} a meshing file was found: {full_map_path}")
                 
                 boundary_output_path = os.path.join(BOUNDARY_PATH, h5_filename)
-                full_flyby_path = os.path.join(FLYBYS_PATH, h5_filename)
                 
                 map_processor.process(
                     map_path=full_map_path,
                     output_path=boundary_output_path
                 )
                 
-                with h5.File(boundary_output_path, 'r') as boundary_file, h5.File(full_flyby_path, 'r') as flyby_h5file:
+                with h5.File(boundary_output_path, 'r') as boundary_file:
                     time_points = boundary_file.keys()
                     boundary_clusters = {}
                     for time_point in time_points:
@@ -207,68 +203,81 @@ if __name__ == "__main__":
                                 )).tolist()
                         else:
                             pass
+                    
+                    processed_flyby_path = os.path.join(PROCESSED_FLYBYS_PATH, h5_filename)
+                    if os.path.exists(processed_flyby_path):
+                        logger.info(f"Flyby file is exist: {processed_flyby_path}, skipping processing.")
+                    else:
+                        if not satellite_data and not flybys:
+                            full_flyby_path = os.path.join(FLYBYS_PATH, h5_filename)
+                            with RinexProcessor(full_rinex_path) as processor:
+                                processor.restor_data(full_flyby_path)
+                                satellite_data = processor.data
+                                flybys = processor.flybys
+                        
+                        process_flyby(
+                            boundary=boundary_clusters,
+                            satellite_data=satellite_data,
+                            flybys=flybys,
+                            date_str=date_str
+                        )
 
-                    process_flyby(
-                        boundary=boundary_clusters,
-                        satellite_data=satellite_data,
-                        flybys=flybys,
-                        date_str=date_str
-                    )
+                
+                    with h5.File(processed_flyby_path, 'r') as flyby_h5file:
+                        stations = flyby_h5file.keys()
 
-                    stations = flyby_h5file.keys()
+                        for station in stations:
+                            satellites = flyby_h5file[station].keys()
 
-                    for station in stations:
-                        satellites = flyby_h5file[station].keys()
+                            for satellite in satellites:
+                                sat_flybys = flyby_h5file[station][satellite].keys()
 
-                        for satellite in satellites:
-                            sat_flybys = flyby_h5file[station][satellite].keys()
+                                for sat_flyby in sat_flybys:
+                                    flyby_group = flyby_h5file[station][satellite][sat_flyby]
 
-                            for sat_flyby in sat_flybys:
-                                flyby_group = flyby_h5file[station][satellite][sat_flyby]
+                                    flyby_roti = flyby_group['roti'][:]
+                                    flyby_ts = flyby_group['timestamps'][:]
 
-                                flyby_roti = flyby_group['roti'][:]
-                                flyby_ts = flyby_group['timestamps'][:]
+                                    cleaned_times = flyby_group.attrs['times']
+                                    cleaned_types = flyby_group.attrs['types']
 
-                                cleaned_times = flyby_group.attrs['times']
-                                cleaned_types = flyby_group.attrs['types']
+                                    ts_time_points = [dt.fromtimestamp(float(t), datetime.UTC) for t in flyby_ts]
+                                    time_points = generate_5min_timestamps(flyby_ts)
+                                    for time_point in time_points:
+                                        time_grp = boundary_file[time_point]
+                                        filtered_points = {
+                                            'lon': time_grp['filtered_points']['lon'][()],
+                                            'lat': time_grp['filtered_points']['lat'][()],
+                                            'vals': time_grp['filtered_points']['vals'][()],
+                                        }
 
-                                ts_time_points = [dt.fromtimestamp(float(t), datetime.UTC) for t in flyby_ts]
-                                time_points = generate_5min_timestamps(flyby_ts)
-                                for time_point in time_points:
-                                    time_grp = boundary_file[time_point]
-                                    filtered_points = {
-                                        'lon': time_grp['filtered_points']['lon'][()],
-                                        'lat': time_grp['filtered_points']['lat'][()],
-                                        'vals': time_grp['filtered_points']['vals'][()],
-                                    }
+                                        sliding_windows = {
+                                            'lon': time_grp['sliding_windows']['lon'][()],
+                                            'lat': time_grp['sliding_windows']['lat'][()],
+                                            'vals': time_grp['sliding_windows']['vals'][()],
+                                        }
 
-                                    sliding_windows = {
-                                        'lon': time_grp['sliding_windows']['lon'][()],
-                                        'lat': time_grp['sliding_windows']['lat'][()],
-                                        'vals': time_grp['sliding_windows']['vals'][()],
-                                    }
+                                        boundary = {
+                                            'lon': time_grp['boundary']['lon'][()],
+                                            'lat': time_grp['boundary']['lat'][()],
+                                        }
 
-                                    boundary = {
-                                        'lon': time_grp['boundary']['lon'][()],
-                                        'lat': time_grp['boundary']['lat'][()],
-                                    }
-
-                                    plot_combined_graphs(
-                                        map_points=filtered_points,
-                                        sliding_windows=sliding_windows,
-                                        flyby_roti=flyby_roti,
-                                        flyby_times=ts_time_points,
-                                        flyby_events_times=cleaned_times,
-                                        flyby_events_types=cleaned_types,
-                                        flyby_idx=sat_flyby,
-                                        boundary_data=boundary,
-                                        boundary_condition=BOUNDARY_CONDITION,
-                                        time_point=time_point,
-                                        boundary_clusters=boundary_clusters,
-                                        roti_file=full_rinex_path,
-                                        station=station,
-                                        satellite=satellite,
-                                        save_to_file=True
-                                    )
+                                        plot_combined_graphs(
+                                            map_points=filtered_points,
+                                            sliding_windows=sliding_windows,
+                                            flyby_roti=flyby_roti,
+                                            flyby_times=ts_time_points,
+                                            flyby_events_times=cleaned_times,
+                                            flyby_events_types=cleaned_types,
+                                            flyby_idx=sat_flyby,
+                                            boundary_data=boundary,
+                                            boundary_condition=BOUNDARY_CONDITION,
+                                            time_point=time_point,
+                                            boundary_clusters=boundary_clusters,
+                                            roti_file=full_rinex_path,
+                                            station=station,
+                                            satellite=satellite,
+                                            save_to_file=True
+                                        )
             else:
                 logger.warning(f"Meshing file not found: {full_map_path}")
