@@ -24,8 +24,7 @@ class PngToVideoConverter:
         """
         png_folders = []
         for root, _, files in os.walk(self.input_dir):
-            png_files = [f for f in files if f.lower().endswith('.png')]
-            if png_files:
+            if any(f.lower().endswith('.png') for f in files):
                 png_folders.append(root)
         return png_folders
 
@@ -43,7 +42,7 @@ class PngToVideoConverter:
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         with imageio.get_writer(output_path, fps=self.fps, codec='libx264') as writer:
-            for image_file in image_files:
+            for image_file in sorted(image_files):
                 try:
                     image = imageio.imread(image_file)
                     writer.append_data(image)
@@ -65,10 +64,19 @@ class PngToVideoConverter:
             png_files = [
                 os.path.join(folder, f) for f in os.listdir(folder) if f.lower().endswith('.png')
             ]
-            if png_files:
-                relative_path = os.path.relpath(folder, self.input_dir)
-                parent_path, video_name = os.path.split(relative_path)
-                video_name = f"{video_name}.mp4"
-                output_folder = os.path.join(self.output_dir, parent_path)
-                output_path = os.path.join(output_folder, video_name)
-                self.create_video_from_images(png_files, output_path)
+            if not png_files:
+                continue
+            
+            
+            relative_path = os.path.relpath(folder, self.input_dir)
+            path_parts = relative_path.split(os.sep)
+
+            if len(path_parts) < 2:
+                logger.warning(f"Skipping folder without substructure: {folder}")
+                continue
+            
+            output_subfolder = os.path.join(self.output_dir, path_parts[0])
+            video_name = "_".join(path_parts[1:]) + ".mp4"
+            output_path = os.path.join(output_subfolder, video_name)
+
+            self.create_video_from_images(png_files, output_path)
