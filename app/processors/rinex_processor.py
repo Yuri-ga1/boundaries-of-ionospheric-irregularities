@@ -108,6 +108,7 @@ class RinexProcessor:
         return d
     
     def __create_h5(self, map_path, flyby_path):
+        logger.info(f'Creating h5 files. Map: {map_path}\t Flyby: {flyby_path}')
         with h5.File(map_path, 'w') as f_map, h5.File(flyby_path, 'w') as f_flyby:
             data_group = f_map.create_group('data')
             processed_data_group = f_flyby.create_group('processed_data')
@@ -149,6 +150,7 @@ class RinexProcessor:
                         flyby_group.create_dataset('timestamps', data=flyby_info['timestamps'])
     
     def restor_data(self, flyby_path):
+        logger.info(f'Restoring data from {flyby_path}')
         processed_data = {}
         flybys_data = {}
 
