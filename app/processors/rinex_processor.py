@@ -34,7 +34,7 @@ class RinexProcessor:
         if lat >= 0 and -2.53073 <= lon <= -0.523599:
             self.stations_coords[station_name] = {'lat': lat, 'lon': lon}
             
-    def __divide_by_flyby(self, station_name, satellite_name, roti, ts):
+    def __divide_by_flyby(self, station_name, satellite_name, roti, ts, lat, lon):
         time_diffs = np.diff(ts)
         pass_indices = np.where(time_diffs >= 1800)[0] + 1
         pass_splits = np.split(np.arange(len(ts)), pass_indices)
@@ -47,10 +47,14 @@ class RinexProcessor:
         for pass_num, indices in enumerate(pass_splits):
             flyby_roti = roti[indices]
             flyby_ts = ts[indices]
+            flyby_lat = lat[indices]
+            flyby_lon = lon[indices]
 
             self.flybys[station_name][satellite_name][f'flyby{pass_num}'] = {
                 'roti': flyby_roti,
                 'timestamps': flyby_ts,
+                'lat': flyby_lat,
+                'lon': flyby_lon
             }
             
     def __process_satellite(self, station_name, satellite_name):
@@ -58,14 +62,6 @@ class RinexProcessor:
         azs = self.file[station_name][satellite_name]['azimuth'][:]
         els = self.file[station_name][satellite_name]['elevation'][:]
         ts = self.file[station_name][satellite_name]['timestamp'][:]
-        
-        self.__divide_by_flyby(station_name, satellite_name, roti, ts)
-        
-        el_mask = (els >= np.radians(10))
-        roti = roti[el_mask]
-        azs = azs[el_mask]
-        els = els[el_mask]
-        ts = ts[el_mask]
         
         st_coords = self.stations_coords[station_name]
         
@@ -82,6 +78,17 @@ class RinexProcessor:
         
         all_lat = np.degrees(all_lat)
         all_lon = np.degrees(all_lon)
+
+        self.__divide_by_flyby(station_name, satellite_name, roti, ts, all_lat, all_lon)
+
+        el_mask = (els >= np.radians(10))
+        roti = roti[el_mask]
+        azs = azs[el_mask]
+        els = els[el_mask]
+        ts = ts[el_mask]
+        all_lat = all_lat[el_mask]
+        all_lon = all_lon[el_mask]
+
         mask = (all_lon >= -120) & (all_lon <= self.lon_condition) & (all_lat >= self.lat_condition) & (ts % 300 == 0)
         
         return {
@@ -142,12 +149,16 @@ class RinexProcessor:
 
             for station_name, satellites in self.flybys.items():
                 station_group = flybys_group.create_group(station_name)
+
                 for satellite_name, flyby_data in satellites.items():
                     satellite_group = station_group.create_group(satellite_name)
+
                     for flyby_name, flyby_info in flyby_data.items():
                         flyby_group = satellite_group.create_group(flyby_name)
                         flyby_group.create_dataset('roti', data=flyby_info['roti'])
                         flyby_group.create_dataset('timestamps', data=flyby_info['timestamps'])
+                        flyby_group.create_dataset('lat', data=flyby_info['lat'])
+                        flyby_group.create_dataset('lon', data=flyby_info['lon'])
     
     def restor_data(self, flyby_path):
         logger.info(f'Restoring data from {flyby_path}')
@@ -183,7 +194,9 @@ class RinexProcessor:
                             flyby_group = satellite_group[flyby_name]
                             flybys_data[station_name][satellite_name][flyby_name] = {
                                 'roti': flyby_group['roti'][()],
-                                'timestamps': flyby_group['timestamps'][()]
+                                'timestamps': flyby_group['timestamps'][()],
+                                'lat': flyby_group['lat'][()],
+                                'lon': flyby_group['lon'][()]
                             }
 
         self.data = self.sort_dict(processed_data)

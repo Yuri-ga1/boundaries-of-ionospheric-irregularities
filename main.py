@@ -143,6 +143,8 @@ def process_flyby(boundary, satellite_data, flybys, date_str):
                         flyby_data = flybys[st][sat][fb_key]
                         flyby_group.create_dataset('roti', data=flyby_data['roti'])
                         flyby_group.create_dataset('timestamps', data=flyby_data['timestamps'])
+                        flyby_group.create_dataset('lat', data=flyby_data['lat'])
+                        flyby_group.create_dataset('lon', data=flyby_data['lon'])
                         logger.info(f'Successfully add new flyby: {st}_{sat}_{fb_key}')
 
                     else:
