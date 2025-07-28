@@ -293,11 +293,14 @@ def plot_example(model_path, h5_file_path):
     plt.show()
 
 
-model, history = train_model(h5_file=DATASET, model_save_path=MODEL_PATH)
+# model, history = train_model(h5_file=DATASET, model_save_path=MODEL_PATH)
+file_path = os.path.join('video', '2019-05-14', '2019-05-14.h5')
+with h5py.File(file_path, 'r') as f:
+    print(f['abad']['G12']['flyby_0']['timestamps'])
 
 #0 2 10 11
-TEST_IDX = 2
-plot_example(
-    h5_file_path=DATASET,
-    model_path=MODEL_PATH,
-)
+# TEST_IDX = 2
+# plot_example(
+#     h5_file_path=DATASET,
+#     model_path=MODEL_PATH,
+# )
