@@ -163,3 +163,9 @@ cython_debug/
 
 graphs/
 files/
+
+# ignoring files created during code execution or that need to be downloaded manually
+
+*.h5
+*.asc
+*.csv

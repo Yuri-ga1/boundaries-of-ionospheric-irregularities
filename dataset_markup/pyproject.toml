@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "dataset-labeling"
+version = "0.1.0"
+description = "Part of boundaries of ionospheric irregularities project. This part is responsible for dataset labeling."
+authors = ["Yuri-ga1 <regota09@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.12"
+h5py = "^3.14.0"
+numpy = "^2.0.0"
+opencv-python = "^4.12.0"
+pillow = "^11.3.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
