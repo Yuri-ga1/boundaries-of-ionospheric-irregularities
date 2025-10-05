@@ -1,5 +1,5 @@
 import tkinter as tk
-from video_labeler import VideoLabeler
+from dataset_labeling.src.core.videolabeler import VideoLabeler
 
 if __name__ == "__main__":
     root = tk.Tk()

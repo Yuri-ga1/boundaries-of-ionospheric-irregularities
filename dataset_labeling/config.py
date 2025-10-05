@@ -10,6 +10,9 @@ DATASET_H5_PATH = os.path.join(FILES_PATH, "datasets", "dataset.h5")
 VIDEO_PATH = os.path.join(FILES_PATH, "video")
 ACCEPTED_FOLDER = os.path.join(VIDEO_PATH, "accepted")
 DECLINED_FOLDER = os.path.join(VIDEO_PATH, "declined")
+OMNI_PATH = os.path.join(FILES_PATH, "omni", 'omni_min2019.asc')
+
+MAG_GRID_FILE = os.path.join(FILES_PATH, 'lat_lon_geo_mag_v2010.csv')
 
 # Настройки отображения
 MAX_WIDTH = 640 * 1.5

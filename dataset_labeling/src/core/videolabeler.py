@@ -4,8 +4,11 @@ from PIL import Image, ImageTk
 import os
 import shutil
 import cv2
+
 from config import *
+
 from custom_logger import Logger
+from dataset_labeling.src.managers.h5datasetmanager import H5DatasetManager
 
 class VideoLabeler:
     def __init__(self, root):
@@ -20,6 +23,8 @@ class VideoLabeler:
             filename=LOG_FILENAME,
             console_logging=CONSOLE_LOGGING
         )
+
+        self.h5_manager = H5DatasetManager(self.logger, OMNI_PATH)
         
         self.setup_ui()
         self.play_video()
@@ -132,52 +137,6 @@ class VideoLabeler:
 
         self.root.after(UPDATE_DELAY, self.update_frame)
 
-    def get_metadata_from_h5(self, file_path, station, satellite, fb):
-        try:
-            with h5py.File(file_path, 'r') as h5file:
-                if station in h5file:
-                    station_h5file = h5file[station]
-                    if satellite in station_h5file:
-                        satellite_h5file = station_h5file[satellite]
-                        if fb in satellite_h5file:
-                            group = satellite_h5file[fb]
-
-                            times = group.attrs.get('times', [])
-                            types = group.attrs.get('types', [])
-
-                            roti = group.get('roti', None)
-                            timestamps = group.get('timestamps', None)
-
-                            if roti is not None:
-                                roti = roti[:]
-                            if timestamps is not None:
-                                timestamps = timestamps[:]
-                            return times, types, roti, timestamps
-        except Exception as e:
-            self.logger.error(f"Ошибка при чтении HDF5 файла: {station}_{satellite}_{fb}")
-        return [], [], None, None
-
-    def save_data_to_h5_dataset(self, new_file_path, group_path, times, types, roti, timestamps):
-        try:
-            with h5py.File(new_file_path, 'a') as h5file:
-                if group_path not in h5file:
-                    group = h5file.create_group(group_path)
-                    group.attrs['times'] = times
-                    group.attrs['types'] = types
-
-                    if roti is not None and len(roti) > 0:
-                        group.create_dataset('roti', data=roti)
-                    else:
-                        self.logger.warning(f"roti пусто или None, не сохраняем {group_path}")
-
-                    if timestamps is not None and len(timestamps) > 0:
-                        group.create_dataset('timestamps', data=timestamps)
-                    else:
-                        self.logger.warning(f"timestamps пусто или None, не сохраняем {group_path}")
-                        
-        except Exception as e:
-            self.logger.error(f"Ошибка при записи в новый HDF5 файл: {group_path}")
-
     def on_accept(self):
         self.process_video(ACCEPTED_FOLDER)
 
@@ -200,14 +159,30 @@ class VideoLabeler:
                 fb = f"{flyby}_{number}"
                 
                 full_h5_file_path = os.path.join(H5_FILE_PATH, f"{date}.h5")
-                times, events, roti, timestamps = self.get_metadata_from_h5(
+
+                roti, timestamps, lon, lat, event_times, event_types = self.h5_manager.get_metadata_from_h5(
                     full_h5_file_path, station, satellite, fb
                 )
 
-                relative_key = f"{date}_{station}_{file_name}"
-                self.save_data_to_h5_dataset(
-                    DATASET_H5_PATH, relative_key, times, events, roti, timestamps
+                all_datasets = self.h5_manager.calculate_all_parameters(
+                    roti=roti,
+                    timestamps=timestamps,
+                    lat=lat,
+                    lon=lon,
+                    date=date
                 )
+
+                relative_key = f"{date}_{station}_{file_name}"
+                
+                self.h5_manager.save_data_to_h5_dataset(
+                    DATASET_H5_PATH, 
+                    relative_key, 
+                    event_times, 
+                    event_types, 
+                    **all_datasets
+                )
+
+                self.logger.info(f"Успешно сохранены данные для: {relative_key}")
 
             except Exception as e:
                 self.logger.error(f"Ошибка при разборе имени файла или метаданных: {e}")
