@@ -1,10 +1,11 @@
 import os
 import imageio
 import traceback
+import shutil
 from config import logger
 
 class PngToVideoConverter:
-    def __init__(self, input_dir, output_dir, fps=16):
+    def __init__(self, input_dir, output_dir, fps=16, remove_png_after_convert=True):
         """
         Initializes the converter with input and output directories and frames per second.
         
@@ -15,6 +16,7 @@ class PngToVideoConverter:
         self.input_dir = input_dir
         self.output_dir = output_dir
         self.fps = fps
+        self.remove_png_after_convert = remove_png_after_convert
 
     def find_all_png_folders(self):
         """
@@ -37,19 +39,62 @@ class PngToVideoConverter:
         """
         if not image_files:
             logger.warning(f"No PNG files found for processing.")
-            return
+            return False
+        try:
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            with imageio.get_writer(output_path, fps=self.fps, codec='libx264') as writer:
+                for image_file in sorted(image_files):
+                    try:
+                        image = imageio.imread(image_file)
+                        writer.append_data(image)
+                    except Exception as e:
+                        logger.error(f"Error reading {image_file}: {traceback.format_exception(e)}")
+            
+            logger.info(f"Video saved at: {output_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Error creating video {output_path}: {traceback.format_exc()}")
+            return False
+
+    def remove_png_folder(self, folder_path):
+        """
+        Removes the PNG folder after successful video creation.
         
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        :param folder_path: str, path to the folder containing PNG files to remove
+        """
+        try:
+            if os.path.exists(folder_path):
+                shutil.rmtree(folder_path)
+                logger.info(f"Successfully removed PNG folder: {folder_path}")
+                return True
+            else:
+                logger.warning(f"Folder doesn't exist, cannot remove: {folder_path}")
+                return False
+        except Exception as e:
+            logger.error(f"Error removing folder {folder_path}: {traceback.format_exc()}")
+            return False
+
+    def remove_empty_parent_folders(self, folder_path):
+        """
+        Recursively removes empty parent folders up to the input directory.
         
-        with imageio.get_writer(output_path, fps=self.fps, codec='libx264') as writer:
-            for image_file in sorted(image_files):
-                try:
-                    image = imageio.imread(image_file)
-                    writer.append_data(image)
-                except Exception as e:
-                    logger.error(f"Error reading {image_file}: {traceback.format_exception(e)}")
+        :param folder_path: str, path to start checking for empty folders
+        """
+        current_dir = folder_path
+        input_dir = os.path.abspath(self.input_dir)
         
-        logger.info(f"Video saved at: {output_path}")
+        while current_dir != input_dir and os.path.exists(current_dir):
+            try:
+                if not os.listdir(current_dir):
+                    os.rmdir(current_dir)
+                    logger.info(f"Removed empty directory: {current_dir}")
+                    current_dir = os.path.dirname(current_dir)
+                else:
+                    break
+            except Exception as e:
+                logger.warning(f"Could not remove directory {current_dir}: {e}")
+                break
 
     def process_images_to_video(self):
         """
@@ -79,4 +124,12 @@ class PngToVideoConverter:
             video_name = "_".join(path_parts[1:]) + ".mp4"
             output_path = os.path.join(output_subfolder, video_name)
 
-            self.create_video_from_images(png_files, output_path)
+            success = self.create_video_from_images(png_files, output_path)
+
+            if success and self.remove_png_after_convert:
+                removal_success = self.remove_png_folder(folder)
+                
+                # Optionally remove empty parent folders
+                if removal_success:
+                    parent_dir = os.path.dirname(folder)
+                    self.remove_empty_parent_folders(parent_dir)

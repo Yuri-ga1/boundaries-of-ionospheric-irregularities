@@ -30,7 +30,7 @@ os.makedirs(BOUNDARY_PATH, exist_ok=True)
 os.makedirs(FLYBYS_PATH, exist_ok=True)
 os.makedirs(PROCESSED_FLYBYS_PATH, exist_ok=True)
 
-GRAPHS_PATH = os.path.join(SCRIPT_DIR, '..', 'files')
+GRAPHS_PATH = os.path.join(FILES_PATH, 'graphs')
 FRAME_GRAPHS_PATH = os.path.join(GRAPHS_PATH, 'combined')
 SAVE_VIDEO_PATH = os.path.join(GRAPHS_PATH, 'video')
 
