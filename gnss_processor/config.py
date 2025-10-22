@@ -1,88 +1,158 @@
-LON_CONDITION = -60
-LAT_CONDITION = 40
-
-SEGMENT_LON_STEP = 0.2
-SEGMENT_LAT_STEP = 0.7
-
-BOUNDARY_CONDITION = 0.07
-
-WINDOW_WIDTH = 10
-WINDOW_AREA = 50
-
-RE_KM = 6356
-HM = 300
-
-MIN_CLUSTER_SIZE = 100
-
-TIME_GAP_LIMIT = 15 #minutes
-
 import os
+import sys
+from custom_logger import Logger
+
+# =============================================================================
+# БАЗОВЫЕ НАСТРОЙКИ ПУТЕЙ
+# =============================================================================
+
+# Базовые пути проекта
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 FILES_PATH = os.path.join(SCRIPT_DIR, '..', 'files')
 
-MAP_PATH =  os.path.join(FILES_PATH, "map")
+# Основные директории данных
+MAP_PATH = os.path.join(FILES_PATH, "map")
 BOUNDARY_PATH = os.path.join(FILES_PATH, 'boundary')
 FLYBYS_PATH = os.path.join(FILES_PATH, "flybys")
 PROCESSED_FLYBYS_PATH = os.path.join(FILES_PATH, "processed_flybys")
 
-os.makedirs(MAP_PATH, exist_ok=True)
-os.makedirs(BOUNDARY_PATH, exist_ok=True)
-os.makedirs(FLYBYS_PATH, exist_ok=True)
-os.makedirs(PROCESSED_FLYBYS_PATH, exist_ok=True)
-
+# Директории для визуализации
 GRAPHS_PATH = os.path.join(FILES_PATH, 'graphs')
 FRAME_GRAPHS_PATH = os.path.join(GRAPHS_PATH, 'combined')
 SAVE_VIDEO_PATH = os.path.join(GRAPHS_PATH, 'video')
 
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# =============================================================================
+# ГЕОГРАФИЧЕСКИЕ ПАРАМЕТРЫ
+# =============================================================================
 
-from custom_logger import Logger
+# Основные координатные ограничения для обработки данных
+LON_CONDITION = -60    # Максимальная долгота для обработки
+LAT_CONDITION = 40     # Минимальная широта для обработки
 
-logger = Logger(
-    filename="gnss_processor.log",
-    console_logging=False
-)
+# Геометрические параметры для расчетов
+RE_KM = 6356           # Радиус Земли в километрах
+HM = 300               # Высота ионосферы в километрах
 
-#--------------------------------------------------------------------------------
-
-# Обработка RINEX файлов
-TIME_DIFF_THRESHOLD_SECONDS = 1800  # Порог для разделения пролетов (30 минут)
-MIN_ELEVATION_DEGREES = 10  # Минимальный угол возвышения
-MAP_TIME_STEP_SECONDS = 300  # Временной шаг для карт (5 минут)
-
-# Координатные ограничения для станций
+# Координатные ограничения для отбора станций (Радианы)
 COORDINATE_BOUNDS = {
-    'min_lat': 0,
-    'max_lat': 90,
-    'min_lon': -2.53073,
-    'max_lon': -0.523599
+    'min_lat': 0,      # Минимальная широта станции
+    'max_lat': 1.5708,     # Максимальная широта станции  
+    'min_lon': -2.53073,  # Минимальная долгота станции
+    'max_lon': -0.523599  # Максимальная долгота станции
 }
-
-# Обработка карт и границ
-GRID_POINTS = 100  # Количество точек для интерполяционной сетки
-DBSCAN_EPS = 0.7  # Параметр eps для DBSCAN
-DBSCAN_MIN_SAMPLES = 3  # Минимальное количество samples для DBSCAN
-MAX_LATITUDE = 90  # Максимальная широта для северного полушария
 
 # Общие пределы для графиков
 COMMON_X_LIMITS = (-120, LON_CONDITION)
 COMMON_Y_LIMITS = (LAT_CONDITION, 90)
+MAX_LATITUDE = 90      # Максимальная широта для северного полушария
+
+# =============================================================================
+# ПАРАМЕТРЫ ОБРАБОТКИ КАРТ (MapProcessor)
+# =============================================================================
+
+# Параметры сегментации для скользящего окна
+SEGMENT_LON_STEP = 0.2  # Шаг скользящего окна по долготе
+SEGMENT_LAT_STEP = 0.7  # Шаг скользящего окна по широте
+
+# Параметры скользящего окна
+WINDOW_WIDTH = 10      # Ширина окна в градусах
+WINDOW_AREA = 50       # Площадь окна
+
+# Пороговое значение для определения границы аврорального овала
+BOUNDARY_CONDITION = 0.07
+
+# Параметры интерполяции для обнаружения границ
+GRID_POINTS = 100      # Количество точек для интерполяционной сетки
+
+# =============================================================================
+# ПАРАМЕТРЫ ОБРАБОТКИ RINEX ФАЙЛОВ (SimurgHDF5Processor)
+# =============================================================================
+
+# Временные параметры обработки
+TIME_DIFF_THRESHOLD_SECONDS = 1800    # Порог для разделения пролетов (30 минут)
+MAP_TIME_STEP_SECONDS = 300           # Временной шаг для карт (5 минут)
+TIME_GAP_LIMIT = 15                   # Лимит временного промежутка в минутах
+
+# Фильтрация данных
+MIN_ELEVATION_DEGREES = 10            # Минимальный угол возвышения спутника
+
+# =============================================================================
+# ПАРАМЕТРЫ КЛАСТЕРИЗАЦИИ
+# =============================================================================
+
+MIN_CLUSTER_SIZE = 100                # Минимальный размер кластера
+
+# Параметры алгоритма DBSCAN
+DBSCAN_EPS = 0.7                      # Параметр eps для DBSCAN
+DBSCAN_MIN_SAMPLES = 3                # Минимальное количество samples для DBSCAN
+
+# =============================================================================
+# ПАРАМЕТРЫ РАСЧЕТА ТРАЕКТОРИЙ СПУТНИКОВ
+# =============================================================================
+
+ARTIFICIAL_POINTS_INTERVAL_MINUTES = 10  # Интервал для вставки искусственных точек
+ARTIFICIAL_POINTS_OFFSET_SECONDS = 30    # Смещение искусственных точек от середины промежутка
+
+# =============================================================================
+# ПАРАМЕТРЫ ВИЗУАЛИЗАЦИИ
+# =============================================================================
 
 # Цветовые схемы для событий
 COLOR_MAPPINGS = {
-    "entered": "green",
-    "exited": "red", 
-    "noise": "yellow"
+    "entered": "green",    # Цвет для события входа в область
+    "exited": "red",       # Цвет для события выхода из области
+    "noise": "yellow"      # Цвет для шумовых событий
 }
 
 # Конфигурация графиков
 PLOT_CONFIGS = {
-    'figure_size': (16, 12),
-    'colormap': 'coolwarm',
-    'normalization_range': (0, 0.1)
+    'figure_size': (16, 12),          # Размер фигуры в дюймах
+    'colormap': 'coolwarm',           # Цветовая карта для графиков
+    'normalization_range': (0, 0.1)   # Диапазон нормализации значений
 }
 
-# Расчет траекторий спутников
-ARTIFICIAL_POINTS_INTERVAL_MINUTES = 10  # Интервал для вставки искусственных точек
-ARTIFICIAL_POINTS_OFFSET_SECONDS = 30    # Смещение искусственных точек от середины промежутка
+# =============================================================================
+# НАСТРОЙКА ЛОГГЕРА
+# =============================================================================
+
+# Инициализация логгера
+logger = Logger(
+    filename="gnss_processor.log",  # Имя файла лога
+    console_logging=False           # Вывод в консоль (True/False)
+)
+
+# =============================================================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# =============================================================================
+
+def create_directories():
+    """
+    Создание необходимых директорий для работы проекта.
+    """
+    directories = [
+        MAP_PATH,
+        BOUNDARY_PATH, 
+        FLYBYS_PATH,
+        PROCESSED_FLYBYS_PATH,
+        GRAPHS_PATH,
+        FRAME_GRAPHS_PATH,
+        SAVE_VIDEO_PATH
+    ]
+    
+    for directory in directories:
+        os.makedirs(directory, exist_ok=True)
+        logger.debug(f"Directory created/verified: {directory}")
+
+def setup_environment():
+    """
+    Настройка окружения проекта.
+    """
+    # Добавление корневой директории в PYTHONPATH
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    sys.path.append(project_root)
+    
+    # Создание директорий
+    create_directories()
+
+# Автоматическая настройка при импорте модуля
+setup_environment()
