@@ -1,25 +1,3 @@
-# Обработка RINEX файлов
-TIME_DIFF_THRESHOLD_SECONDS = 1800  # Порог для разделения пролетов (30 минут)
-MIN_ELEVATION_DEGREES = 10  # Минимальный угол возвышения
-MAP_TIME_STEP_SECONDS = 300  # Временной шаг для карт (5 минут)
-
-# Координатные ограничения для станций
-COORDINATE_BOUNDS = {
-    'min_lat': 0,
-    'max_lat': 90,
-    'min_lon': -2.53073,
-    'max_lon': -0.523599
-}
-
-# Обработка карт и границ
-GRID_POINTS = 100  # Количество точек для интерполяционной сетки
-DBSCAN_EPS = 0.7  # Параметр eps для DBSCAN
-DBSCAN_MIN_SAMPLES = 3  # Минимальное количество samples для DBSCAN
-MAX_LATITUDE = 90  # Максимальная широта для северного полушария
-
-
-
-#--------------------------------------------------------------------------------
 LON_CONDITION = -60
 LAT_CONDITION = 40
 
@@ -65,3 +43,46 @@ logger = Logger(
     filename="gnss_processor.log",
     console_logging=False
 )
+
+#--------------------------------------------------------------------------------
+
+# Обработка RINEX файлов
+TIME_DIFF_THRESHOLD_SECONDS = 1800  # Порог для разделения пролетов (30 минут)
+MIN_ELEVATION_DEGREES = 10  # Минимальный угол возвышения
+MAP_TIME_STEP_SECONDS = 300  # Временной шаг для карт (5 минут)
+
+# Координатные ограничения для станций
+COORDINATE_BOUNDS = {
+    'min_lat': 0,
+    'max_lat': 90,
+    'min_lon': -2.53073,
+    'max_lon': -0.523599
+}
+
+# Обработка карт и границ
+GRID_POINTS = 100  # Количество точек для интерполяционной сетки
+DBSCAN_EPS = 0.7  # Параметр eps для DBSCAN
+DBSCAN_MIN_SAMPLES = 3  # Минимальное количество samples для DBSCAN
+MAX_LATITUDE = 90  # Максимальная широта для северного полушария
+
+# Общие пределы для графиков
+COMMON_X_LIMITS = (-120, LON_CONDITION)
+COMMON_Y_LIMITS = (LAT_CONDITION, 90)
+
+# Цветовые схемы для событий
+COLOR_MAPPINGS = {
+    "entered": "green",
+    "exited": "red", 
+    "noise": "yellow"
+}
+
+# Конфигурация графиков
+PLOT_CONFIGS = {
+    'figure_size': (16, 12),
+    'colormap': 'coolwarm',
+    'normalization_range': (0, 0.1)
+}
+
+# Расчет траекторий спутников
+ARTIFICIAL_POINTS_INTERVAL_MINUTES = 10  # Интервал для вставки искусственных точек
+ARTIFICIAL_POINTS_OFFSET_SECONDS = 30    # Смещение искусственных точек от середины промежутка
