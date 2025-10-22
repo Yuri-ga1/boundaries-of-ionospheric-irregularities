@@ -1,3 +1,16 @@
+# Обработка RINEX файлов
+TIME_DIFF_THRESHOLD_SECONDS = 1800  # Порог для разделения пролетов (30 минут)
+MIN_ELEVATION_DEGREES = 10  # Минимальный угол возвышения
+MAP_TIME_STEP_SECONDS = 300  # Временной шаг для карт (5 минут)
+
+# Координатные ограничения для станций
+COORDINATE_BOUNDS = {
+    'min_lat': 0,
+    'max_lat': 90,
+    'min_lon': -2.53073,
+    'max_lon': -0.523599
+}
+
 LON_CONDITION = -60
 LAT_CONDITION = 40
 

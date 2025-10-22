@@ -3,7 +3,7 @@ import traceback
 from config import *
 
 from app.processors.map_processor import MapProcessor
-from app.processors.rinex_processor import RinexProcessor
+from gnss_processor.app.processors.simurg_hdf5_processor import SimurgHDF5Processor
 from app.png_to_video_converter import PngToVideoConverter
 
 from debug_code.plot_graphs import *
@@ -170,7 +170,7 @@ if __name__ == "__main__":
             full_rinex_path = os.path.join(FILES_PATH, rinex_file)
             full_map_path = os.path.join(MAP_PATH, h5_filename)
 
-            with RinexProcessor(full_rinex_path) as processor:
+            with SimurgHDF5Processor(full_rinex_path) as processor:
                 processor.process(h5_filename)
                 satellite_data = processor.map_data
                 flybys = processor.flybys
@@ -214,7 +214,7 @@ if __name__ == "__main__":
                     else:
                         if not satellite_data and not flybys:
                             full_flyby_path = os.path.join(FLYBYS_PATH, h5_filename)
-                            with RinexProcessor(full_rinex_path) as processor:
+                            with SimurgHDF5Processor(full_rinex_path) as processor:
                                 processor.restor_data(full_flyby_path)
                                 satellite_data = processor.map_data
                                 flybys = processor.flybys
