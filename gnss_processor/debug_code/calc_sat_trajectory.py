@@ -2,7 +2,7 @@ import numpy as np
 from datetime import timedelta
 import datetime
 from datetime import datetime as dt
-from app.az_el_to_lot_lon import az_el_to_lat_lon
+from gnss_processor.app.utils.az_el_to_lot_lon import az_el_to_lat_lon
 from config import *
 
 class Trajectory:
