@@ -1,18 +1,22 @@
-import matplotlib.pyplot as plt
-import h5py as h5
 import numpy as np
+import h5py as h5
 import os
-
-from copy import deepcopy
-from sklearn.cluster import DBSCAN
-from collections import Counter
-
-from scipy.interpolate import griddata
+from typing import Dict, List, Optional, Any
 
 from config import *
-from debug_code.plot_graphs import *
+from gnss_processor.app.services.auroral_oval.boundary_detector import BoundaryDetector
+from gnss_processor.app.services.auroral_oval.cluster_processor import ClusterProcessor
+from gnss_processor.app.services.auroral_oval.sliding_window_processor import SlidingWindowProcessor
+
 
 class MapProcessor:
+    """
+    Основной класс для обработки карт ROTI и обнаружения границ аврорального овала.
+    
+    Обрабатывает HDF5 файлы с данными карт, применяет фильтрацию, скользящее окно,
+    интерполяцию и кластеризацию для выделения границ.
+    """
+    
     def __init__(
         self,
         lon_condition: float,
@@ -22,12 +26,14 @@ class MapProcessor:
         boundary_condition: float
     ):
         """
-        Initializes the MapProcessor object.
-
-        :param lon_condition: float, longitude condition for pole proximity.
-        :param lat_condition: float, latitude condition for pole proximity.
-        :param segment_lon_step: float, sliding window step in longitude.
-        :param segment_lat_step: float, sliding window step in latitude.
+        Инициализация процессора карт.
+        
+        Args:
+            lon_condition: Условие по долготе для близости к полюсу
+            lat_condition: Условие по широте для близости к полюсу
+            segment_lon_step: Шаг скользящего окна по долготе
+            segment_lat_step: Шаг скользящего окна по широте
+            boundary_condition: Пороговое значение для определения границы
         """
         self.lon_condition = lon_condition
         self.lat_condition = lat_condition
@@ -36,8 +42,34 @@ class MapProcessor:
         self.boundary_condition = boundary_condition
         
         self.file_name = None
+        
+        # Инициализация процессоров
+        self.boundary_detector = BoundaryDetector(
+            lon_condition=lon_condition,
+            lat_condition=lat_condition,
+            boundary_condition=boundary_condition
+        )
+        
+        self.sliding_window_processor = SlidingWindowProcessor(
+            lon_step=segment_lon_step,
+            lat_step=segment_lat_step
+        )
+        
+        self.cluster_processor = ClusterProcessor(
+            lat_condition=lat_condition
+        )
+    
+
+    def _filter_coordinate_points(self, points_group: h5.Group) -> Dict[str, np.ndarray]:
+        """
+        Фильтрация точек по координатным условиям.
+        
+        Args:
+            points_group: HDF5 группа с данными точек
             
-    def __filter_points(self, points_group):
+        Returns:
+            Dict[str, np.ndarray]: Отфильтрованные точки {'lon', 'lat', 'vals'}
+        """
         lon = points_group['lon'][()]
         lat = points_group['lat'][()]
         vals = points_group['vals'][()]
@@ -52,267 +84,174 @@ class MapProcessor:
         
         return filtered_points
     
-    def __apply_sliding_window(self, filtered_points, window_size=(5, 10)):
+
+    def process_map_file(
+        self, 
+        map_path: str, 
+        output_path: str, 
+        time_points: Optional[List[str]] = None
+    ) -> None:
         """
-        Applies a sliding window approach to segment the data.
-
-        :param filtered_points: dict, containing 'lon', 'lat', and 'vals'.
-        :param window_size: tuple, defining (lat, lon) window size.
-        :return: List of windowed data segments.
-        """
-        lon = filtered_points['lon']
-        lat = filtered_points['lat']
-        vals = filtered_points['vals']
+        Основной метод обработки файла карты.
         
-        min_lon, max_lon = np.min(lon), np.max(lon)
-        min_lat, max_lat = np.min(lat), np.max(lat)
-        
-        windows = []
-        current_lat = min_lat
-        
-        while current_lat + window_size[0] <= max_lat:
-            current_lon = min_lon
-            while current_lon + window_size[1] <= max_lon:
-                mask = (lon >= current_lon) & (lon < current_lon + window_size[1]) & \
-                       (lat >= current_lat) & (lat < current_lat + window_size[0])
-                
-                if np.any(mask):
-                    center_lon = current_lon + window_size[1] / 2
-                    center_lat = current_lat + window_size[0] / 2
-                    
-                    windows.append({
-                        'lon': center_lon,
-                        'lat': center_lat,
-                        'vals': np.median(vals[mask])
-                    })
-                
-                current_lon += self.segment_lon_step
-            
-            current_lat += self.segment_lat_step
-            
-        return windows
-    
-    def __get_boundary_data(self, sliding_windows):
-        lon = np.array([entry['lon'] for entry in sliding_windows])
-        lat = np.array([entry['lat'] for entry in sliding_windows])
-        vals = np.array([entry['vals'] for entry in sliding_windows])
-
-        grid_points = 100
-        xi = np.linspace(lon.min(), lon.max(), grid_points)
-        yi = np.linspace(lat.min(), lat.max(), grid_points)
-        zi = griddata(
-            (lon, lat), 
-            vals, 
-            (xi[None, :], yi[:, None]), 
-            method='linear', 
-            fill_value=np.nan
-        )
-        
-        boundary_data = {'lat': [], 'lon': []}
-            
-        if np.all(np.isnan(zi)):
-            return boundary_data
-        
-        plt.figure()
-        cs = plt.contour(xi, yi, zi, levels=[self.boundary_condition])
-        plt.close()
-
-        if len(cs.allsegs) > 0:
-            contour_segments = cs.allsegs[0]
-            for segment in contour_segments:
-                if len(segment) > 0:
-                    boundary_data['lon'].extend(segment[:, 0].tolist())
-                    boundary_data['lat'].extend(segment[:, 1].tolist())
-        
-        return boundary_data
-    
-    
-    def __delete_circle(self, data, condition):
-        first_col_abs = np.abs(data[:, 0])
-        
-        increasing = first_col_abs[1] > first_col_abs[0]
-        
-        if increasing:
-            max_index = np.argmax(first_col_abs)
-            mask = (np.arange(len(data)) <= max_index) | np.any(data == condition, axis=1)
-        else:
-            min_index = np.argmin(first_col_abs)
-            mask = (np.arange(len(data)) <= min_index) | np.any(data == condition, axis=1)
-        
-        return data[mask]
-
-    def __create_boundary_clusters(self, lat_list, lon_list, min_cluster_size=MIN_CLUSTER_SIZE):
-        dbscan = DBSCAN(eps=0.7, min_samples=3)
-        
-        top_edge_con = LAT_CONDITION
-        bottom_edge_con = 90
-        
-        if lat_list and lon_list:
-            column_coords = np.column_stack((lon_list, lat_list))
-            labels = dbscan.fit_predict(column_coords)
-            
-            label_counts = Counter(labels)
-            del label_counts[-1]
-            
-            valid_clusters = {label: count for label, count in label_counts.items() if count >= min_cluster_size}
-            
-            if len(valid_clusters) < 1:
-                return None
-            
-            sorted_clusters = sorted(valid_clusters, key=valid_clusters.get, reverse=True)
-            
-            cluster_dict = {}
-            for idx, label in enumerate(sorted_clusters):
-                cluster = column_coords[labels == label]
-                cluster_dict[f"border{idx+1}"] = cluster.tolist()
-            
-            if len(sorted_clusters) == 1:
-                single_cluster = cluster_dict['border1'] 
-                left_edge = deepcopy(min(single_cluster, key=lambda p: p[0]))
-                right_edge = deepcopy(max(single_cluster, key=lambda p: p[0]))
-                
-                left_edge[1], right_edge[1] = bottom_edge_con, bottom_edge_con
-                
-                single_cluster = np.insert(single_cluster, 0, left_edge, axis=0)
-                single_cluster = np.insert(single_cluster, len(single_cluster), right_edge, axis=0)
-                single_cluster = self.__delete_circle(single_cluster, bottom_edge_con)
-                
-                if len(single_cluster) < min_cluster_size:
-                    return None
-                
-                cluster_dict["border1"] = single_cluster.tolist()
-                
-                return {"relation": "single-cluster", **cluster_dict}
-            
-            top_clusters = sorted_clusters[:2]
-            
-            cluster1 = np.array(cluster_dict[f"border{sorted_clusters.index(top_clusters[0]) + 1}"])
-            cluster2 = np.array(cluster_dict[f"border{sorted_clusters.index(top_clusters[1]) + 1}"])
-            
-            cluster1_center = np.mean(cluster1, axis=0)
-            cluster2_center = np.mean(cluster2, axis=0)
-            
-            if abs(cluster1_center[0] - cluster2_center[0]) > abs(cluster1_center[1] - cluster2_center[1]):
-                relation = "left-right"
-            else:
-                relation = "top-bottom"
-            
-            if relation == "top-bottom":
-                if cluster1_center[1] > cluster2_center[1]:
-                    top_cluster, bottom_cluster = cluster1, cluster2
-                else:
-                    top_cluster, bottom_cluster = cluster2, cluster1
-                
-                left_edge_top_cluster = deepcopy(min(top_cluster, key=lambda p: p[0]))
-                right_edge_top_cluster = deepcopy(max(top_cluster, key=lambda p: p[0]))
-                left_edge_bottom_cluster = deepcopy(min(bottom_cluster, key=lambda p: p[0]))
-                right_edge_bottom_cluster = deepcopy(max(bottom_cluster, key=lambda p: p[0]))
-                
-                if abs(left_edge_bottom_cluster[0]) > abs(left_edge_top_cluster[0]):
-                    left_edge_top_cluster[0] = left_edge_bottom_cluster[0]
-                    top_cluster = np.insert(top_cluster, len(top_cluster), left_edge_top_cluster, axis=0)
-                
-                if abs(right_edge_top_cluster[0]) > abs(right_edge_bottom_cluster[0]):
-                    right_edge_top_cluster[0] = right_edge_bottom_cluster[0]
-                    top_cluster = np.insert(top_cluster, 0, right_edge_top_cluster, axis=0)
-                
-                left_edge_top_cluster[1], right_edge_top_cluster[1] = top_edge_con, top_edge_con
-                left_edge_bottom_cluster[1], right_edge_bottom_cluster[1] = bottom_edge_con, bottom_edge_con
-                
-                top_cluster = np.insert(top_cluster, len(top_cluster), left_edge_top_cluster, axis=0)
-                top_cluster = np.insert(top_cluster, len(top_cluster), right_edge_top_cluster, axis=0)
-                bottom_cluster = np.insert(bottom_cluster, 0, left_edge_bottom_cluster, axis=0)
-                bottom_cluster = np.insert(bottom_cluster, len(bottom_cluster), right_edge_bottom_cluster, axis=0)
-                
-                top_cluster = self.__delete_circle(top_cluster, top_edge_con)
-                bottom_cluster = self.__delete_circle(bottom_cluster, bottom_edge_con)
-
-                if len(top_cluster) < min_cluster_size or len(bottom_cluster) < min_cluster_size:
-                    return None
-
-                cluster_dict[f"border{sorted_clusters.index(top_clusters[0]) + 1}"] = top_cluster.tolist()
-                cluster_dict[f"border{sorted_clusters.index(top_clusters[1]) + 1}"] = bottom_cluster.tolist()
-            return {
-                "relation": relation,
-                **cluster_dict
-            }
-
-
-    def process(self, map_path: str, output_path: str, time_points=None):
-        """
-        Processes the map file and saves intermediate and final results to a new HDF5 file.
-
-        :param map_path: str, path to the input HDF5 file.
-        :param output_path: str, path to the output HDF5 file.
-        :param time_points: list or None, specific time points to process.
+        Args:
+            map_path: Путь к входному HDF5 файлу с картами
+            output_path: Путь для сохранения обработанных данных
+            time_points: Список временных точек для обработки (None = все точки)
         """
         self.file_name = os.path.basename(map_path)
         
         if os.path.exists(output_path):
-            logger.info(f"Boundary file is exist: {output_path}")
+            logger.info(f"Boundary file already exists: {output_path}")
             return
             
-        with h5.File(map_path, 'r') as file, h5.File(output_path, 'w') as out_file:
-
-            data = file["data"]
+        with h5.File(map_path, 'r') as input_file, h5.File(output_path, 'w') as output_file:
+            data_group = input_file["data"]
+            
             if time_points is None:
-                time_points = data.keys()
+                time_points = list(data_group.keys())
 
             for time_point in time_points:
                 logger.info(f"Processing {time_point} in {self.file_name}.")
+                self._process_single_time_point(data_group, time_point, output_file)
+    
 
-                points_group = data[time_point]
+    def _process_single_time_point(
+        self, 
+        data_group: h5.Group, 
+        time_point: str, 
+        output_file: h5.File
+    ) -> None:
+        """
+        Обработка одной временной точки.
+        
+        Args:
+            data_group: Группа с данными из входного файла
+            time_point: Идентификатор временной точки
+            output_file: Выходной HDF5 файл
+        """
+        points_group = data_group[time_point]
+        
+        # Создание группы для временной точки в выходном файле
+        time_group = output_file.create_group(str(time_point))
+        
+        # 1. Сохранение исходных точек
+        self._save_raw_points(points_group, time_group)
+        
+        # 2. Фильтрация точек
+        filtered_points = self._filter_coordinate_points(points_group)
+        self._save_filtered_points(filtered_points, time_group)
+        
+        # 3. Применение скользящего окна
+        window_height = WINDOW_AREA / WINDOW_WIDTH
+        sliding_windows = self.sliding_window_processor.apply_sliding_window_segmentation(
+            filtered_points=filtered_points,
+            window_size=(window_height, WINDOW_WIDTH),
+        )
+        self._save_sliding_windows(sliding_windows, time_group)
+        
+        # 4. Обнаружение границ
+        boundary_data = self.boundary_detector.extract_boundary_contours(sliding_windows)
+        self._save_boundary_data(boundary_data, time_group)
+        
+        # 5. Кластеризация границ
+        boundary_clusters = self.cluster_processor.create_boundary_clusters(
+            lat_list=boundary_data['lat'],
+            lon_list=boundary_data['lon']
+        )
+        self._save_boundary_clusters(boundary_clusters, time_group)
+    
 
-                # 1. raw points
-                lon = points_group['lon'][()]
-                lat = points_group['lat'][()]
-                vals = points_group['vals'][()]
-                
-                group = out_file.create_group(str(time_point))
-                points_grp = group.create_group("points")
-                points_grp.create_dataset("lon", data=lon)
-                points_grp.create_dataset("lat", data=lat)
-                points_grp.create_dataset("vals", data=vals)
+    def _save_raw_points(self, points_group: h5.Group, time_group: h5.Group) -> None:
+        """
+        Сохранение исходных точек данных.
+        
+        Args:
+            points_group: Группа с исходными точками
+            time_group: Группа для сохранения в выходном файле
+        """
+        lon = points_group['lon'][()]
+        lat = points_group['lat'][()]
+        vals = points_group['vals'][()]
+        
+        points_subgroup = time_group.create_group("points")
+        points_subgroup.create_dataset("lon", data=lon)
+        points_subgroup.create_dataset("lat", data=lat)
+        points_subgroup.create_dataset("vals", data=vals)
+    
 
-                # 2. filtered_points
-                filtered_points = self.__filter_points(points_group)
-                filtered_grp = group.create_group("filtered_points")
-                filtered_grp.create_dataset("lon", data=filtered_points["lon"])
-                filtered_grp.create_dataset("lat", data=filtered_points["lat"])
-                filtered_grp.create_dataset("vals", data=filtered_points["vals"])
+    def _save_filtered_points(
+        self, 
+        filtered_points: Dict[str, np.ndarray], 
+        time_group: h5.Group
+    ) -> None:
+        """
+        Сохранение отфильтрованных точек.
+        
+        Args:
+            filtered_points: Отфильтрованные данные точек
+            time_group: Группа для сохранения в выходном файле
+        """
+        filtered_subgroup = time_group.create_group("filtered_points")
+        filtered_subgroup.create_dataset("lon", data=filtered_points["lon"])
+        filtered_subgroup.create_dataset("lat", data=filtered_points["lat"])
+        filtered_subgroup.create_dataset("vals", data=filtered_points["vals"])
+    
+    def _save_sliding_windows(
+        self, 
+        sliding_windows: List[Dict[str, float]], 
+        time_group: h5.Group
+    ) -> None:
+        """
+        Сохранение данных скользящего окна.
+        
+        Args:
+            sliding_windows: Данные сегментов скользящего окна
+            time_group: Группа для сохранения в выходном файле
+        """
+        sliding_subgroup = time_group.create_group("sliding_windows")
+        sliding_subgroup.create_dataset("lon", data=[p["lon"] for p in sliding_windows])
+        sliding_subgroup.create_dataset("lat", data=[p["lat"] for p in sliding_windows])
+        sliding_subgroup.create_dataset("vals", data=[p["vals"] for p in sliding_windows])
+    
 
-                # 3. sliding_windows
-                window_heigth = WINDOW_AREA / WINDOW_WIDTH
-                sliding_windows = self.__apply_sliding_window(
-                    filtered_points=filtered_points,
-                    window_size=(window_heigth, WINDOW_WIDTH),
-                )
+    def _save_boundary_data(
+        self, 
+        boundary_data: Dict[str, List[float]], 
+        time_group: h5.Group
+    ) -> None:
+        """
+        Сохранение данных границ.
+        
+        Args:
+            boundary_data: Данные обнаруженных границ
+            time_group: Группа для сохранения в выходном файле
+        """
+        boundary_subgroup = time_group.create_group("boundary")
+        boundary_subgroup.create_dataset("lon", data=boundary_data["lon"])
+        boundary_subgroup.create_dataset("lat", data=boundary_data["lat"])
+    
 
-                sliding_grp = group.create_group("sliding_windows")
-                sliding_grp.create_dataset("lon", data=[p["lon"] for p in sliding_windows])
-                sliding_grp.create_dataset("lat", data=[p["lat"] for p in sliding_windows])
-                sliding_grp.create_dataset("vals", data=[p["vals"] for p in sliding_windows])
-
-                # 4. boundary_data
-                boundary_data = self.__get_boundary_data(sliding_windows)
-                boundary_grp = group.create_group("boundary")
-                boundary_grp.create_dataset("lon", data=boundary_data["lon"])
-                boundary_grp.create_dataset("lat", data=boundary_data["lat"])
-
-                # 5. boundary_clusters
-                boundary_clusters = self.__create_boundary_clusters(
-                    lat_list=boundary_data['lat'],
-                    lon_list=boundary_data['lon']
-                )
-
-                if boundary_clusters is not None:
-                    clusters_grp = group.create_group("boundary_clusters")
-                    clusters_grp.attrs["relation"] = boundary_clusters["relation"]
-                    for key, cluster_points in boundary_clusters.items():
-                        if key == "relation":
-                            continue
-                        cluster_grp = clusters_grp.create_group(key)
-                        cluster_points = np.array(cluster_points)
-                        cluster_grp.create_dataset("lon", data=cluster_points[:, 0])
-                        cluster_grp.create_dataset("lat", data=cluster_points[:, 1])
-                    
+    def _save_boundary_clusters(
+        self, 
+        boundary_clusters: Optional[Dict[str, Any]], 
+        time_group: h5.Group
+    ) -> None:
+        """
+        Сохранение кластеризованных границ.
+        
+        Args:
+            boundary_clusters: Данные кластеров границ
+            time_group: Группа для сохранения в выходном файле
+        """
+        if boundary_clusters is not None:
+            clusters_subgroup = time_group.create_group("boundary_clusters")
+            clusters_subgroup.attrs["relation"] = boundary_clusters["relation"]
+            
+            for key, cluster_points in boundary_clusters.items():
+                if key == "relation":
+                    continue
+                cluster_subgroup = clusters_subgroup.create_group(key)
+                cluster_points_array = np.array(cluster_points)
+                cluster_subgroup.create_dataset("lon", data=cluster_points_array[:, 0])
+                cluster_subgroup.create_dataset("lat", data=cluster_points_array[:, 1])
