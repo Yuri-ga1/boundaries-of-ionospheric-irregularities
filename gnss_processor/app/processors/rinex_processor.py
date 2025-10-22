@@ -8,6 +8,16 @@ from collections import OrderedDict
 
 from app.az_el_to_lot_lon import az_el_to_lat_lon
 
+"""
+Создается 2 файла. Первый карты, второй с поделенными пролетами спутника.
+
+Пролеты спутника отличаются от исходно только тем, что они поделены на пролеты
++ 4 параметра roti, timestamp, lon, lat (градусы).
+
+Карты имеют шаг в 5 минут. Отрезку по el >= 10deg и ограничивается координатами
+из условия в функции __process_satellite
+"""
+
 class RinexProcessor:
     def __init__(self, file_path):
         self.file_path = file_path
@@ -17,7 +27,7 @@ class RinexProcessor:
         self.lat_condition = LAT_CONDITION
         
         self.stations_coords = {}
-        self.data = {}
+        self.map_data = {}
         self.flybys = {}
     
     def __enter__(self):
@@ -31,6 +41,7 @@ class RinexProcessor:
     def __save_station_coords(self, station_name):
         station = self.file[station_name]
         lat, lon = station.attrs['lat'], station.attrs['lon']
+        # TODO избавиться от захардкоженных диапозонов координат станций
         if lat >= 0 and -2.53073 <= lon <= -0.523599:
             self.stations_coords[station_name] = {'lat': lat, 'lon': lon}
             
@@ -81,6 +92,7 @@ class RinexProcessor:
 
         self.__divide_by_flyby(station_name, satellite_name, roti, ts, all_lat, all_lon)
 
+        # TODO проверить почему это находится ниже чем цикл выше
         el_mask = (els >= np.radians(10))
         roti = roti[el_mask]
         azs = azs[el_mask]
@@ -121,7 +133,7 @@ class RinexProcessor:
             processed_data_group = f_flyby.create_group('processed_data')
             flybys_group = f_flyby.create_group('flybys')
 
-            for ts, st_sat in self.data.items():
+            for ts, st_sat in self.map_data.items():
                 lats = []
                 lons = []
                 vals = []
@@ -199,7 +211,7 @@ class RinexProcessor:
                                 'lon': flyby_group['lon'][()]
                             }
 
-        self.data = self.sort_dict(processed_data)
+        self.map_data = self.sort_dict(processed_data)
         self.flybys = self.sort_dict(flybys_data)
 
 
@@ -238,5 +250,5 @@ class RinexProcessor:
                         
                     processed_data[ts][st_sat] = entry
                     
-        self.data = self.sort_dict(processed_data)
+        self.map_data = self.sort_dict(processed_data)
         self.__create_h5(map_path, flyby_path)
