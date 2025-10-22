@@ -15,6 +15,7 @@ MAP_PATH = os.path.join(FILES_PATH, "map")
 BOUNDARY_PATH = os.path.join(FILES_PATH, 'boundary')
 FLYBYS_PATH = os.path.join(FILES_PATH, "flybys")
 PROCESSED_FLYBYS_PATH = os.path.join(FILES_PATH, "processed_flybys")
+RAW_DATA_PATH = os.path.join(FILES_PATH, "raw_data")
 
 # Директории для визуализации
 GRAPHS_PATH = os.path.join(FILES_PATH, 'graphs')
@@ -136,7 +137,8 @@ def create_directories():
         PROCESSED_FLYBYS_PATH,
         GRAPHS_PATH,
         FRAME_GRAPHS_PATH,
-        SAVE_VIDEO_PATH
+        SAVE_VIDEO_PATH,
+        RAW_DATA_PATH
     ]
     
     for directory in directories:
