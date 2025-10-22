@@ -7,7 +7,7 @@ import datetime
 from collections import OrderedDict
 from typing import Dict, Optional
 
-from app.processors.satellite_data_processor import SatelliteDataProcessor
+from gnss_processor.app.services.satellite.satellite_data_processor import SatelliteDataProcessor
 
 
 class SimurgHDF5Processor:
