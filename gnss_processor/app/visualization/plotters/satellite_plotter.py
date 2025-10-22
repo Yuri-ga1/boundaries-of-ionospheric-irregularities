@@ -6,7 +6,7 @@ from datetime import datetime as dt
 import datetime
 
 from typing import List
-from app.services.satellite.trajectory_calculator import Trajectory
+from app.services.satellite.trajectory_calculator import SatelliteTrajectory
 
 
 class SatellitePlotter:
@@ -45,7 +45,7 @@ class SatellitePlotter:
             time_point: Временная точка для выделения
             ax_list: Список осей для отрисовки
         """
-        trajectory = Trajectory(
+        trajectory = SatelliteTrajectory(
             lat_site=station_lat,
             lon_site=station_lon,
         )
@@ -64,7 +64,7 @@ class SatellitePlotter:
     def _add_trajectory_to_axis(
         self, 
         ax: plt.Axes, 
-        trajectory: Trajectory, 
+        trajectory: SatelliteTrajectory, 
         time_point: str, 
         color: str
     ) -> None:

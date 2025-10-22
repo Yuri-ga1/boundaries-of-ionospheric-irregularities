@@ -7,8 +7,9 @@ from custom_logger import Logger
 # =============================================================================
 
 # Базовые пути проекта
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-FILES_PATH = os.path.join(SCRIPT_DIR, '..', 'files')
+SCRIPT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+print(SCRIPT_DIR)
+FILES_PATH = os.path.join(SCRIPT_DIR, 'files')
 
 # Основные директории данных
 MAP_PATH = os.path.join(FILES_PATH, "map")
@@ -16,6 +17,7 @@ BOUNDARY_PATH = os.path.join(FILES_PATH, 'boundary')
 FLYBYS_PATH = os.path.join(FILES_PATH, "flybys")
 PROCESSED_FLYBYS_PATH = os.path.join(FILES_PATH, "processed_flybys")
 RAW_DATA_PATH = os.path.join(FILES_PATH, "raw_data")
+LOGS_PATH = os.path.join(FILES_PATH, "logs")
 
 # Директории для визуализации
 GRAPHS_PATH = os.path.join(FILES_PATH, 'graphs')
@@ -113,16 +115,6 @@ PLOT_CONFIGS = {
 }
 
 # =============================================================================
-# НАСТРОЙКА ЛОГГЕРА
-# =============================================================================
-
-# Инициализация логгера
-logger = Logger(
-    filename="gnss_processor.log",  # Имя файла лога
-    console_logging=False           # Вывод в консоль (True/False)
-)
-
-# =============================================================================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # =============================================================================
 
@@ -138,23 +130,31 @@ def create_directories():
         GRAPHS_PATH,
         FRAME_GRAPHS_PATH,
         SAVE_VIDEO_PATH,
-        RAW_DATA_PATH
+        RAW_DATA_PATH,
+        LOGS_PATH
     ]
     
     for directory in directories:
         os.makedirs(directory, exist_ok=True)
-        logger.debug(f"Directory created/verified: {directory}")
 
 def setup_environment():
     """
     Настройка окружения проекта.
     """
     # Добавление корневой директории в PYTHONPATH
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    sys.path.append(project_root)
+    sys.path.append(SCRIPT_DIR)
     
     # Создание директорий
     create_directories()
 
 # Автоматическая настройка при импорте модуля
 setup_environment()
+
+# =============================================================================
+# Инициализация логгера
+# =============================================================================
+
+logger = Logger(
+    filename=os.path.join(LOGS_PATH, "gnss_processor.log"),  # Имя файла лога
+    console_logging=False           # Вывод в консоль (True/False)
+)

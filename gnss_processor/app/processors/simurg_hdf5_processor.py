@@ -160,7 +160,9 @@ class SimurgHDF5Processor:
         
         with h5.File(map_file_path, 'w') as map_file, h5.File(flyby_file_path, 'w') as flyby_file:
             self._write_map_data(map_file)
+            logger.info(f'Map file: {map_file_path} was successfully created')
             self._write_flyby_data(flyby_file)
+            logger.info(f'Flyby file: {flyby_file_path} was successfully created')
     
 
     def _write_map_data(self, map_file: h5.File) -> None:

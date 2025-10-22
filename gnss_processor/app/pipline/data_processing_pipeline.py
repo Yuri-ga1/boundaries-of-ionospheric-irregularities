@@ -104,7 +104,7 @@ class DataProcessingPipeline:
     
     def _get_rinex_file_path(self, date_str: str) -> str:
         """Получение пути к RINEX файлу."""
-        return os.path.join(FILES_PATH, f"{date_str}.h5")
+        return os.path.join(RAW_DATA_PATH, f"{date_str}.h5")
     
     def _get_map_file_path(self, date_str: str) -> str:
         """Получение пути к файлу карт."""
@@ -143,7 +143,7 @@ class DataProcessingPipeline:
         
         try:
             with SimurgHDF5Processor(rinex_file_path) as processor:
-                processor.process_rinex_file(f"{date_str}.h5")
+                processor.process(f"{date_str}.h5")
                 return processor.map_data, processor.flybys
                 
         except Exception as e:

@@ -4,7 +4,7 @@ import datetime
 from typing import Dict, List, Any
 
 from config import PROCESSED_FLYBYS_PATH, logger
-from app.services.boundary.crossing_detector import BoundaryCrossingDetector
+from app.services.auroral_oval.crossing_detector import BoundaryCrossingDetector
 from app.visualization.plotters.timeseries_plotter import TimeSeriesPlotter
 
 
