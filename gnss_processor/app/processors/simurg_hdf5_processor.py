@@ -279,8 +279,9 @@ class SimurgHDF5Processor:
         map_file_path = os.path.join(MAP_PATH, output_map_name)
         flyby_file_path = os.path.join(FLYBYS_PATH, output_map_name)
         
-        if os.path.exists(map_file_path):
-            logger.info(f"Map file already exists: {map_file_path}")
+        if os.path.exists(map_file_path) and os.path.exists(flyby_file_path):
+            logger.info(f"Map and flyby file already exists: {map_file_path},\t{flyby_file_path}")
+            self.restore_processed_data(flyby_file_path)
             return
         
         processed_data = {}
