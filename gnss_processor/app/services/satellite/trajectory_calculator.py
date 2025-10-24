@@ -16,7 +16,7 @@ class SatelliteTrajectory:
     применяет фильтрацию и добавляет искусственные точки для непрерывности траектории.
     """
     
-    def __init__(self, station_latitude: float, station_longitude: float) -> None:
+    def __init__(self, lat_site: float, lon_site: float) -> None:
         """
         Инициализация калькулятора траектории.
         
@@ -24,10 +24,10 @@ class SatelliteTrajectory:
             station_latitude: Широта станции в радианах
             station_longitude: Долгота станции в радианах
         """
-        self.station_latitude = station_latitude
-        self.station_longitude = station_longitude
-        self.trajectory_latitudes: np.ndarray = np.array([])
-        self.trajectory_longitudes: np.ndarray = np.array([])
+        self.station_latitude = lat_site
+        self.station_longitude = lon_site
+        self.traj_lat: np.ndarray = np.array([])
+        self.traj_lon: np.ndarray = np.array([])
         self.timestamps: np.ndarray = np.array([])
         
     def filter_coordinate_points(self) -> None:
@@ -37,13 +37,13 @@ class SatelliteTrajectory:
         Отбрасывает точки, выходящие за заданные границы долготы и широты.
         """
         valid_points_mask = (
-            (self.trajectory_longitudes >= -120) & 
-            (self.trajectory_longitudes <= LON_CONDITION) & 
-            (self.trajectory_latitudes >= LAT_CONDITION)
+            (self.traj_lon >= -120) & 
+            (self.traj_lon <= LON_CONDITION) & 
+            (self.traj_lat >= LAT_CONDITION)
         )
         
-        self.trajectory_longitudes = self.trajectory_longitudes[valid_points_mask]
-        self.trajectory_latitudes = self.trajectory_latitudes[valid_points_mask]
+        self.traj_lon = self.traj_lon[valid_points_mask]
+        self.traj_lat = self.traj_lat[valid_points_mask]
         self.timestamps = self.timestamps[valid_points_mask]
     
     def _find_large_time_gaps(self) -> np.ndarray:
@@ -109,11 +109,11 @@ class SatelliteTrajectory:
         insertion_indices = large_gap_indices.repeat(points_per_gap)
         
         self.timestamps = np.insert(self.timestamps, insertion_indices, artificial_timestamps)
-        self.trajectory_latitudes = np.insert(
-            self.trajectory_latitudes, insertion_indices, artificial_coordinates
+        self.traj_lat = np.insert(
+            self.traj_lat, insertion_indices, artificial_coordinates
         )
-        self.trajectory_longitudes = np.insert(
-            self.trajectory_longitudes, insertion_indices, artificial_coordinates
+        self.traj_lon = np.insert(
+            self.traj_lon, insertion_indices, artificial_coordinates
         )
     
     def calculate_satellite_coordinates(
@@ -146,7 +146,7 @@ class SatelliteTrajectory:
             
         return np.degrees(latitudes), np.degrees(longitudes)
     
-    def process_trajectory(
+    def process(
         self, 
         azimuths: np.ndarray, 
         elevations: np.ndarray, 
@@ -166,7 +166,7 @@ class SatelliteTrajectory:
         self.timestamps = np.array(timestamps, dtype=float)
         
         # Расчет координат спутника
-        self.trajectory_latitudes, self.trajectory_longitudes = self.calculate_satellite_coordinates(
+        self.traj_lat, self.traj_lon = self.calculate_satellite_coordinates(
             azimuths, elevations
         )
         
@@ -186,7 +186,7 @@ class SatelliteTrajectory:
         Raises:
             AssertionError: Если размеры массивов координат и времени не совпадают
         """
-        assert len(self.trajectory_latitudes) == len(self.trajectory_longitudes) == len(self.timestamps), \
+        assert len(self.traj_lat) == len(self.traj_lon) == len(self.timestamps), \
             "Размеры массивов координат и времени должны совпадать"
     
     def get_trajectory_data(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -197,7 +197,7 @@ class SatelliteTrajectory:
             Tuple[np.ndarray, np.ndarray, np.ndarray]: 
             Широты, долготы и временные метки траектории
         """
-        return self.trajectory_latitudes, self.trajectory_longitudes, self.timestamps
+        return self.traj_lat, self.traj_lon, self.timestamps
     
     def get_trajectory_length(self) -> int:
         """

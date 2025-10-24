@@ -53,7 +53,7 @@ class SatellitePlotter:
         trajectory.process(
             azimuths=satellite_azimuths,
             elevations=satellite_elevations,
-            times=satellite_times
+            timestamps=satellite_times
         )
 
         if trajectory.traj_lat.size > 0 and trajectory.traj_lon.size > 0:
@@ -92,7 +92,7 @@ class SatellitePlotter:
             time_point_dt = dt.strptime(time_point, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.UTC)
 
         time_point_ts = time_point_dt.timestamp()
-        closest_idx = np.argmin(np.abs(np.array(trajectory.times) - time_point_ts))
+        closest_idx = np.argmin(np.abs(np.array(trajectory.timestamps) - time_point_ts))
         
         try:
             scatter = ax.scatter(
