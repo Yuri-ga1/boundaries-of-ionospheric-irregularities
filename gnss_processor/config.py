@@ -8,7 +8,6 @@ from custom_logger import Logger
 
 # Базовые пути проекта
 SCRIPT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-print(SCRIPT_DIR)
 FILES_PATH = os.path.join(SCRIPT_DIR, 'files')
 
 # Основные директории данных
@@ -99,6 +98,12 @@ ARTIFICIAL_POINTS_OFFSET_SECONDS = 30    # Смещение искусствен
 # =============================================================================
 # ПАРАМЕТРЫ ВИЗУАЛИЗАЦИИ
 # =============================================================================
+
+DPI = 300 #Dots Per Inch
+FONT_SIZE = 16 #Fonr size
+TITLE_FONT_SIZE = 18
+LEGEND_SIZE = 14
+LABEL_SIZE = 10
 
 # Цветовые схемы для событий
 COLOR_MAPPINGS = {

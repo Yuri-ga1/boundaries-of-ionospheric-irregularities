@@ -5,7 +5,7 @@ import shutil
 from config import logger
 
 class PngToVideoConverter:
-    def __init__(self, input_dir, output_dir, fps=16, remove_png_after_convert=True):
+    def __init__(self, input_dir, output_dir, fps=16, remove_png_after_convert=False):
         """
         Initializes the converter with input and output directories and frames per second.
         

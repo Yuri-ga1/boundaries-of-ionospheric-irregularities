@@ -50,10 +50,10 @@ class MapPlotter:
         fig.colorbar(scatter, ax=ax, label='ROTI')
         
         if created_fig:
-            ax.set_title(f'ROTI Map at {time_point}')
+            ax.set_title(f'ROTI Map (irregular) at {time_point}')
             plt.show()
         else:
-            ax.set_title(f'ROTI Map')
+            ax.set_title(f'ROTI Map (irregular)')
             return fig, ax
     
     def create_sliding_window_plot(
@@ -108,8 +108,8 @@ class MapPlotter:
             ax.legend()
 
         if created_fig:
-            ax.set_title(f"Sliding Window at {time_point}")
+            ax.set_title(f"ROTI Map (regular) at {time_point}")
             plt.show()
         else:
-            ax.set_title(f"Sliding Window")
+            ax.set_title(f"ROTI Map (regular)")
             return fig, ax

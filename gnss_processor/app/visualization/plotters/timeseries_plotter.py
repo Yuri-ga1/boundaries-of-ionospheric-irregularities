@@ -62,7 +62,7 @@ class TimeSeriesPlotter:
         self._configure_time_axis(ax)
         self._configure_value_axis(ax, roti)
 
-        ax.set_xlabel("Time")
+        ax.set_xlabel(f"Time for {time_point.strftime("%Y-%m-%d")}")
         ax.set_ylabel("ROTI")
 
         if time_point is not None:
@@ -124,7 +124,7 @@ class TimeSeriesPlotter:
             self._highlight_time_point(ax, time_point)
 
         self._add_flyby_legend(ax)
-        ax.set_title(f"Flyby for {station}_{satellite}")
+        ax.set_title(f"ROTI Time series for {station}_{satellite}")
         
         if created_fig:
             plt.show()
@@ -172,7 +172,7 @@ class TimeSeriesPlotter:
         except ValueError:
             time_dt = dt.strptime(time_point, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.UTC)
             
-        ax.axvspan(time_dt, time_dt + timedelta(minutes=5), color='red', alpha=0.3, label="Time Point")
+        ax.axvspan(time_dt, time_dt + timedelta(minutes=5), color='grey', alpha=0.3, label="Time Point")
     
     def _add_event_highlights(
         self, 

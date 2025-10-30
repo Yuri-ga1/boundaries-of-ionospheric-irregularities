@@ -275,10 +275,12 @@ class DataProcessingPipeline:
         """
         try:
             with h5.File(processed_flyby_path, 'r') as flyby_file:
-                stations = list(flyby_file.keys())
+                # stations = list(flyby_file.keys())
+                stations = ['picl']
                 
                 for station in stations:
-                    satellites = list(flyby_file[station].keys())
+                    # satellites = list(flyby_file[station].keys())
+                    satellites = ['G01']
                     
                     for satellite in satellites:
                         sat_flybys = list(flyby_file[station][satellite].keys())

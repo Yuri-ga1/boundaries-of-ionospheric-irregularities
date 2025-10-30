@@ -97,7 +97,7 @@ class PolygonPlotter:
         else:
             fig = ax.figure
             created_fig = False
-            ax.set_title(f"Polygon")
+            ax.set_title(f"Region of ionospheric irregulations")
         
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
@@ -134,14 +134,14 @@ class PolygonPlotter:
             single_cluster_polygon: Одиночный полигон кластера
             intersection: Пересечение полигонов
         """
-        for poly, color, label in polygons:
+        for poly, color, _ in polygons:
             if isinstance(poly, Polygon):
                 x, y = poly.exterior.xy
-                ax.plot(x, y, f'{color}--', label=label)
+                ax.plot(x, y, f'{color}--')
             elif isinstance(poly, MultiPolygon):
                 for part in poly.geoms:
                     x, y = part.exterior.xy
-                    ax.plot(x, y, f'{color}--', label=label)
+                    ax.plot(x, y, f'{color}--')
         
         if single_cluster_polygon:
             self._fill_single_cluster(ax, single_cluster_polygon)
@@ -175,4 +175,4 @@ class PolygonPlotter:
         """
         for poly in ([intersection] if isinstance(intersection, Polygon) else intersection.geoms):
             x, y = poly.exterior.xy
-            ax.fill(x, y, 'purple', alpha=0.5, label="Intersection")
+            ax.fill(x, y, 'purple', alpha=0.5, label="AORI")

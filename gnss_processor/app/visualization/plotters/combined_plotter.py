@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
 from typing import Dict, List, Any, Optional
-from config import FRAME_GRAPHS_PATH, COMMON_X_LIMITS, COMMON_Y_LIMITS, logger
+from config import FRAME_GRAPHS_PATH, COMMON_X_LIMITS, COMMON_Y_LIMITS, DPI, FONT_SIZE, TITLE_FONT_SIZE, LEGEND_SIZE, LABEL_SIZE, logger
 
 from app.visualization.plotters.polygon_plotter import PolygonPlotter
 from app.visualization.plotters.map_plotter import MapPlotter
@@ -66,8 +66,9 @@ class CombinedPlotter:
         Returns:
             Optional[plt.Figure]: Объект figure или None при ошибке
         """
-        fig = plt.figure(figsize=(16, 12))
+        fig = plt.figure(figsize=(16, 12), dpi=DPI)
         gs = GridSpec(2, 2, figure=fig)
+        self.set_plt_def_params()
         
         # Создание осей для всех графиков
         map_ax = fig.add_subplot(gs[0, 0])
@@ -129,16 +130,19 @@ class CombinedPlotter:
                 
                 # Добавление траектории спутника
                 self.satellite_plotter.add_satellite_trajectory(
+                    station_name=station,
                     station_lat=roti_h5file[station].attrs['lat'],
                     station_lon=roti_h5file[station].attrs['lon'],
+                    satellite_name=satellite,
                     satellite_azimuths=roti_h5file[station][satellite]['azimuth'][:],
                     satellite_elevations=roti_h5file[station][satellite]['elevation'][:],
                     satellite_times=roti_h5file[station][satellite]['timestamp'][:],
                     time_point=time_point,
                     ax_list=[map_ax, sliding_window_ax, polygon_ax]
                 )
-
-            fig.suptitle(f'Graphs for {station}_{satellite} at {time_point}')
+                
+            print(type(time_point), time_point)
+            fig.suptitle(f'Data for {station}_{satellite} at {time_point[:-9]} UT')
             fig.tight_layout()
             
             # Корректировка размеров для лучшего отображения
@@ -163,6 +167,16 @@ class CombinedPlotter:
             logger.error(f"Error creating combined visualization: {e}")
             plt.close(fig)
             return None
+        
+    def set_plt_def_params(self):
+        plt.rcParams['figure.dpi'] = DPI
+        plt.rcParams['savefig.dpi'] = DPI
+        plt.rcParams['font.size'] = FONT_SIZE
+        plt.rcParams['axes.titlesize'] = TITLE_FONT_SIZE
+        plt.rcParams['axes.labelsize'] = LABEL_SIZE
+        plt.rcParams['xtick.labelsize'] = LABEL_SIZE
+        plt.rcParams['ytick.labelsize'] = LABEL_SIZE
+        plt.rcParams['legend.fontsize'] = LEGEND_SIZE
     
     def _adjust_subplot_sizes(
         self, 

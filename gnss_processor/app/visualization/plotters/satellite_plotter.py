@@ -25,8 +25,10 @@ class SatellitePlotter:
     
     def add_satellite_trajectory(
         self,
+        station_name: str,
         station_lat: float,
         station_lon: float,
+        satellite_name: str,
         satellite_azimuths: np.ndarray,
         satellite_elevations: np.ndarray, 
         satellite_times: np.ndarray,
@@ -37,8 +39,10 @@ class SatellitePlotter:
         Добавление траектории спутника на графики.
         
         Args:
+            station_name: Названеи станции
             station_lat: Широта станции
             station_lon: Долгота станции
+            satellite_name: Название спутника
             satellite_azimuths: Азимуты спутника
             satellite_elevations: Углы возвышения спутника
             satellite_times: Временные метки спутника
@@ -59,11 +63,13 @@ class SatellitePlotter:
         if trajectory.traj_lat.size > 0 and trajectory.traj_lon.size > 0:
             color = 'black'
             for ax in ax_list:
-                self._add_trajectory_to_axis(ax, trajectory, time_point, color)
+                self._add_trajectory_to_axis(ax, station_name, satellite_name, trajectory, time_point, color)
     
     def _add_trajectory_to_axis(
         self, 
         ax: plt.Axes, 
+        station_name: str,
+        satellite_name: str,
         trajectory: SatelliteTrajectory, 
         time_point: str, 
         color: str
@@ -109,8 +115,8 @@ class SatellitePlotter:
         
         # Обновление легенды
         handles.append(scatter)
-        labels.append("Time Point")
+        labels.append("SIP position at 08:00 UT")
         handles.append(line)
-        labels.append("Trajectory")
+        labels.append(f"SIPs {station_name}-{satellite_name}")
         
         ax.legend(handles, labels, loc='upper right', bbox_to_anchor=(1, 1))

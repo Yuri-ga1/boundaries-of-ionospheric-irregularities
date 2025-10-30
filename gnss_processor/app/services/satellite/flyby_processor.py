@@ -3,7 +3,7 @@ from datetime import datetime as dt
 import datetime
 from typing import Dict, List, Any
 
-from config import PROCESSED_FLYBYS_PATH, logger
+from config import logger
 from app.services.auroral_oval.crossing_detector import BoundaryCrossingDetector
 from app.visualization.plotters.timeseries_plotter import TimeSeriesPlotter
 
