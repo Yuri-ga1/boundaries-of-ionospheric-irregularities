@@ -164,6 +164,9 @@ cython_debug/
 graphs/
 files/
 
+# ignoring folders that are used for tests, but are not to be stored in Git
+gnss_processor/tests/performance/results/
+
 # ignoring files created during code execution or that need to be downloaded manually
 
 *.h5
