@@ -42,6 +42,9 @@ class BoundaryDetector:
         Returns:
             Dict[str, List[float]]: Координаты граничных точек {'lat': [], 'lon': []}
         """
+        if not sliding_windows:
+            return {'lat': [], 'lon': []}
+    
         lon = np.array([entry['lon'] for entry in sliding_windows])
         lat = np.array([entry['lat'] for entry in sliding_windows])
         vals = np.array([entry['vals'] for entry in sliding_windows])
