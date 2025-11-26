@@ -38,15 +38,29 @@ class SlidingWindowProcessor:
         lat = filtered_points['lat']
         vals = filtered_points['vals']
         
+        # Проверка на пустые массивы
+        if len(lon) == 0 or len(lat) == 0 or len(vals) == 0:
+            return []
+        
         min_lon, max_lon = np.min(lon), np.max(lon)
         min_lat, max_lat = np.min(lat), np.max(lat)
         
         windows = []
-        current_lat = min_lat
         
-        while current_lat + window_size[0] <= max_lat:
-            current_lon = min_lon
-            while current_lon + window_size[1] <= max_lon:
+        # Добавляем небольшие эпсилоны для учета ошибок округления с плавающей точкой
+        epsilon = 1e-10
+        
+        # Вычисляем количество шагов для полного покрытия диапазона
+        lat_steps = int(np.ceil((max_lat - min_lat + window_size[0]) / self.lat_step)) + 1
+        lon_steps = int(np.ceil((max_lon - min_lon + window_size[1]) / self.lon_step)) + 1
+        
+        # Генерируем центры окон
+        for i in range(lat_steps):
+            current_lat = min_lat - window_size[0] / 2 + i * self.lat_step
+            
+            for j in range(lon_steps):
+                current_lon = min_lon - window_size[1] / 2 + j * self.lon_step
+                
                 mask = self._create_window_mask(
                     lon, lat, current_lon, current_lat, window_size
                 )
@@ -56,10 +70,6 @@ class SlidingWindowProcessor:
                         vals, mask, current_lon, current_lat, window_size
                     )
                     windows.append(window_data)
-                
-                current_lon += self.lon_step
-            
-            current_lat += self.lat_step
             
         return windows
     

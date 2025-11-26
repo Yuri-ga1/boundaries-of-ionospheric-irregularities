@@ -334,3 +334,25 @@ def complex_map_hdf5_file():
     
     if os.path.exists(file_path):
         os.unlink(file_path)
+
+@pytest.fixture
+def mock_cluster_config():
+    """
+    Mock configuration for ClusterProcessor testing.
+    """
+    with patch('app.services.auroral_oval.cluster_processor.MIN_CLUSTER_SIZE') as mock_min_size, \
+         patch('app.services.auroral_oval.cluster_processor.DBSCAN_EPS') as mock_eps, \
+         patch('app.services.auroral_oval.cluster_processor.DBSCAN_MIN_SAMPLES') as mock_min_samples, \
+         patch('app.services.auroral_oval.cluster_processor.MAX_LATITUDE') as mock_max_lat:
+        
+        mock_min_size.return_value = 10
+        mock_eps.return_value = 0.5
+        mock_min_samples.return_value = 5
+        mock_max_lat.return_value = 80.0
+        
+        yield {
+            'min_cluster_size': mock_min_size,
+            'dbscan_eps': mock_eps,
+            'dbscan_min_samples': mock_min_samples,
+            'max_latitude': mock_max_lat
+        }
